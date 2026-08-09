@@ -1,5 +1,13 @@
 {
   "version": "7",
   "dialect": "mysql",
-  "entries": []
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1785593806463,
+      "tag": "0000_glossy_rockslide",
+      "breakpoints": true
+    }
+  ]
 }

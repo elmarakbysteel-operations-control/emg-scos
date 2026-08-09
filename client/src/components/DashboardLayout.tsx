@@ -21,15 +21,32 @@ import {
 } from "@/components/ui/sidebar";
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Package, ShoppingCart, Truck, FileCheck, DollarSign, FileText, CheckSquare, BarChart3, Database, Mail, FilePlus, BookOpen, Settings, Shield, Info } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Page 1", path: "/" },
-  { icon: Users, label: "Page 2", path: "/some-path" },
+  { icon: LayoutDashboard, label: "Executive Dashboard", path: "/" },
+  { icon: BarChart3, label: "Operations Dashboard", path: "/operations" },
+  { icon: Package, label: "Shipment Register", path: "/shipments" },
+  { icon: ShoppingCart, label: "Procurement", path: "/procurement" },
+  { icon: Users, label: "Supplier Management", path: "/suppliers" },
+  { icon: Truck, label: "Freight Management", path: "/freight" },
+  { icon: FileCheck, label: "Customs Management", path: "/customs" },
+  { icon: DollarSign, label: "Cost Control", path: "/costs" },
+  { icon: FileText, label: "Documents Center", path: "/documents" },
+  { icon: CheckSquare, label: "Task Manager", path: "/tasks" },
+  { icon: BarChart3, label: "Reports Center", path: "/reports" },
+  { icon: BarChart3, label: "KPI Dashboard", path: "/kpi" },
+  { icon: Database, label: "Master Data", path: "/master-data" },
+  { icon: Mail, label: "Email Templates", path: "/email-templates" },
+  { icon: FilePlus, label: "Forms Library", path: "/forms" },
+  { icon: BookOpen, label: "Knowledge Center", path: "/knowledge" },
+  { icon: Settings, label: "Settings", path: "/settings" },
+  { icon: Shield, label: "Audit Log", path: "/audit" },
+  { icon: Info, label: "About System", path: "/about" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -168,9 +185,7 @@ function DashboardLayoutContent({
               </button>
               {!isCollapsed ? (
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-semibold tracking-tight truncate">
-                    Navigation
-                  </span>
+                  <span className="font-semibold tracking-tight truncate">EMG-SCOS</span>
                 </div>
               ) : null}
             </div>
