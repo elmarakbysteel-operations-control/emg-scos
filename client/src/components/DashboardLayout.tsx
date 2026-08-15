@@ -20,7 +20,8 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Package, ShoppingCart, Truck, FileCheck, DollarSign, FileText, CheckSquare, BarChart3, Database, Mail, FilePlus, BookOpen, Settings, Shield, Info } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Package, ShoppingCart, Truck, FileCheck, DollarSign, FileText, CheckSquare, BarChart3, Database, Mail, FilePlus, BookOpen, Settings, Shield, Info, BellRing, Landmark, SearchX } from "lucide-react";
+import { trpc } from "@/lib/trpc";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "./ui/button";
@@ -29,10 +30,13 @@ const menuItems = [
   { icon: LayoutDashboard, label: "Executive Dashboard", path: "/" },
   { icon: BarChart3, label: "Operations Dashboard", path: "/operations" },
   { icon: Package, label: "Shipment Register", path: "/shipments" },
+  { icon: BellRing, label: "Free Time Alerts", path: "/alerts" },
   { icon: ShoppingCart, label: "Procurement", path: "/procurement" },
   { icon: Users, label: "Supplier Management", path: "/suppliers" },
   { icon: Truck, label: "Freight Management", path: "/freight" },
+  { icon: Landmark, label: "Bank & LC Tracking", path: "/bank-lc" },
   { icon: FileCheck, label: "Customs Management", path: "/customs" },
+  { icon: SearchX, label: "Doc Discrepancy", path: "/doc-check" },
   { icon: DollarSign, label: "Cost Control", path: "/costs" },
   { icon: FileText, label: "Documents Center", path: "/documents" },
   { icon: CheckSquare, label: "Task Manager", path: "/tasks" },
@@ -94,6 +98,8 @@ function DashboardLayoutContent({
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
+  const { data: alertsData } = trpc.alerts.list.useQuery();
+  const unreadAlerts = (alertsData || []).filter(a => a.read === "no" && ["free_time_expiry", "demurrage_risk", "lc_expiry"].includes(a.alertType || "")).length;
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const activeMenuItem = menuItems.find(item => item.path === location);
@@ -157,6 +163,16 @@ function DashboardLayoutContent({
                   <span className="font-semibold tracking-tight truncate">EMG-SCOS</span>
                 </div>
               ) : null}
+              {!isCollapsed && unreadAlerts > 0 && (
+                <button
+                  onClick={() => setLocation("/alerts")}
+                  className="ml-auto flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                  title="تنبيهات حرجة"
+                >
+                  <BellRing className="h-3.5 w-3.5" />
+                  <span>{unreadAlerts}</span>
+                </button>
+              )}
             </div>
           </SidebarHeader>
 
@@ -176,6 +192,11 @@ function DashboardLayoutContent({
                         className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
                       />
                       <span>{item.label}</span>
+                      {item.path === "/alerts" && unreadAlerts > 0 && (
+                        <span className="ml-auto rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-semibold text-destructive-foreground">
+                          {unreadAlerts}
+                        </span>
+                      )}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );

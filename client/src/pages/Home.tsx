@@ -144,8 +144,8 @@ export default function Home() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="month" fontSize={12} />
                   <YAxis fontSize={12} allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="shipments" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Shipments" />
+                  <Tooltip formatter={(v: number) => [`${v} شحنة`, "Shipments"]} />
+                  <Bar dataKey="shipments" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Shipments" isAnimationActive={false} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -166,9 +166,9 @@ export default function Home() {
                 <LineChart data={monthly}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="month" fontSize={12} />
-                  <YAxis fontSize={12} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="cost" stroke="#10b981" strokeWidth={2} dot={{ fill: "#10b981", r: 4 }} name="Cost (USD)" />
+                  <YAxis fontSize={12} tickFormatter={(v: number) => `$${v.toLocaleString()}`} />
+                  <Tooltip formatter={(v: number) => [`$${Number(v).toLocaleString(undefined, {maximumFractionDigits: 0})}`, "Cost (USD)"]} />
+                  <Line type="monotone" dataKey="cost" stroke="#10b981" strokeWidth={2} dot={{ fill: "#10b981", r: 4 }} name="Cost (USD)" isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>
             )}

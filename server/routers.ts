@@ -141,6 +141,52 @@ export const appRouter = router({
     update: publicProcedure.input(z.any()).mutation(async ({ input }) => { const { id, ...data } = input; return db.updateDepartment(id, data); }),
     delete: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => db.deleteDepartment(input.id)),
   }),
+
+  // Bank / LC Tracking
+  bankLc: router({
+    list: publicProcedure.query(async () => db.getBankLc()),
+    create: publicProcedure.input(z.any()).mutation(async ({ input }) => db.createBankLc(input)),
+    update: publicProcedure.input(z.any()).mutation(async ({ input }) => { const { id, ...data } = input; return db.updateBankLc(id, data); }),
+    delete: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => db.deleteBankLc(input.id)),
+  }),
+
+  // Document Discrepancy Checker
+  docCheck: router({
+    list: publicProcedure.query(async () => db.getDocChecks()),
+    create: publicProcedure.input(z.any()).mutation(async ({ input }) => db.createDocCheck(input)),
+    update: publicProcedure.input(z.any()).mutation(async ({ input }) => { const { id, ...data } = input; return db.updateDocCheck(id, data); }),
+    delete: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => db.deleteDocCheck(input.id)),
+  }),
+
+  // Alerts
+  alerts: router({
+    list: publicProcedure.query(async () => db.getAlerts()),
+    regenerate: publicProcedure.mutation(async () => { await db.regenerateFreeTimeAlerts(); return { success: true }; }),
+    markRead: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => db.markAlertRead(input.id)),
+  }),
+
+  // Free Time & Knowledge Tools
+  tools: router({
+    freeTimeOverview: publicProcedure.query(async () => {
+      const all = await db.getShipments();
+      return all.map(s => ({ ...s, freeTime: db.computeFreeTime(s) }));
+    }),
+    seedKnowledge: publicProcedure.mutation(async () => { await db.seedExpandedKnowledge(); return { success: true }; }),
+  }),
+
+  // Document Upload (S3)
+  shipmentDocs: router({
+    upload: publicProcedure.input(z.object({ fileName: z.string(), mimeType: z.string(), base64: z.string(), shipmentId: z.number(), docType: z.string().optional() })).mutation(async ({ input }) => {
+      const buffer = Buffer.from(input.base64, "base64");
+      const ext = input.fileName.includes(".") ? input.fileName.split(".").pop() : "bin";
+      const key = `shipment-docs/${input.shipmentId}/${Date.now()}-${input.fileName}`;
+      const { storagePut } = await import("./storage");
+      const { url } = await storagePut(key, buffer, input.mimeType || "application/octet-stream");
+      const rec = await db.createDocument({ shipmentId: input.shipmentId, docType: input.docType || "other", fileName: input.fileName, fileUrl: url, uploadDate: new Date(), version: "1.0", status: "uploaded" });
+      return { id: (rec as any).id, url };
+    }),
+    list: publicProcedure.input(z.object({ shipmentId: z.number() })).query(async ({ input }) => db.getDocumentsByShipment(input.shipmentId)),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

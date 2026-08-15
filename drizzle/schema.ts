@@ -81,6 +81,9 @@ export const shipments = mysqlTable("shipments", {
   weight: double("weight"),
   volume: double("volume"),
   healthScore: int("healthScore").default(100),
+  freeTimeDays: int("freeTimeDays").default(0),
+  arrivalDate: timestamp("arrivalDate"),
+  freeTimeExpiry: timestamp("freeTimeExpiry"),
   remarks: text("remarks"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -244,6 +247,55 @@ export const knowledge = mysqlTable("knowledge", {
   orderIndex: int("orderIndex").default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// Bank / LC tracking
+export const bankLc = mysqlTable("bank_lc", {
+  id: int("id").autoincrement().primaryKey(),
+  shipmentId: int("shipmentId").notNull(),
+  bankName: varchar("bankName", { length: 200 }),
+  paymentType: mysqlEnum("paymentType", ["lc", "lc_at_sight", "lc_90days", "lc_120days", "tt", "cash_against_documents"]).default("lc"),
+  lcNumber: varchar("lcNumber", { length: 100 }),
+  amount: double("amount").default(0),
+  currency: varchar("currency", { length: 10 }).default("USD"),
+  status: mysqlEnum("status", ["pending_application", "submitted_to_bank", "issued", "amendment", "documents_presented", "accepted", "paid", "closed", "rejected"]).default("pending_application"),
+  applicationDate: timestamp("applicationDate"),
+  issuanceDate: timestamp("issuanceDate"),
+  expiryDate: timestamp("expiryDate"),
+  documentsArrivalDate: timestamp("documentsArrivalDate"),
+  paymentDate: timestamp("paymentDate"),
+  remarks: text("remarks"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// Document discrepancy checker (drafts review)
+export const docCheck = mysqlTable("doc_check", {
+  id: int("id").autoincrement().primaryKey(),
+  shipmentId: int("shipmentId").notNull(),
+  docName: varchar("docName", { length: 200 }),
+  docType: mysqlEnum("docType", ["commercial_invoice", "bill_of_lading", "certificate_of_origin", "packing_list"]).default("commercial_invoice"),
+  fieldName: varchar("fieldName", { length: 200 }),
+  expectedValue: text("expectedValue"),
+  actualValue: text("actualValue"),
+  matches: mysqlEnum("matches", ["match", "mismatch", "missing", "pending_review"]).default("pending_review"),
+  severity: mysqlEnum("severity", ["low", "medium", "high", "critical"]).default("medium"),
+  resolved: mysqlEnum("resolved", ["yes", "no"]).default("no"),
+  remarks: text("remarks"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+// Alert log for free time / LC / expiry alerts
+export const alertLog = mysqlTable("alert_log", {
+  id: int("id").autoincrement().primaryKey(),
+  shipmentId: int("shipmentId"),
+  alertType: mysqlEnum("alertType", ["free_time_expiry", "demurrage_risk", "lc_expiry", "eta_overdue", "document_missing", "info"]).default("info"),
+  title: varchar("title", { length: 300 }).notNull(),
+  message: text("message"),
+  severity: mysqlEnum("severity", ["low", "medium", "high", "critical"]).default("medium"),
+  read: mysqlEnum("read", ["yes", "no"]).default("no").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 // Audit Log

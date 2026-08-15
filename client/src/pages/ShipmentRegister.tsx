@@ -7,8 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Plus, Search, Edit, Trash2 } from "lucide-react";
+import { Plus, Search, Edit, Trash2, FileSpreadsheet, Download } from "lucide-react";
 import { toast } from "sonner";
+import { exportToExcel } from "@/lib/exportExcel";
+import { exportToPdf } from "@/lib/exportPdf";
 
 const statusColors: Record<string, string> = { draft: "bg-slate-100 text-slate-700", confirmed: "bg-blue-100 text-blue-700", in_transit: "bg-cyan-100 text-cyan-700", arrived: "bg-purple-100 text-purple-700", customs: "bg-amber-100 text-amber-700", cleared: "bg-emerald-100 text-emerald-700", delivered: "bg-green-100 text-green-700", cancelled: "bg-red-100 text-red-700", delayed: "bg-orange-100 text-orange-700" };
 
@@ -40,11 +42,58 @@ export default function ShipmentRegister() {
     } catch { toast.error("Error"); }
   };
   const openEdit = (s: any) => { setEditingId(s.id); setFormData({...defaultForm, ...s}); setDialogOpen(true); };
+  const handleExcelExport = () => {
+    exportToExcel(shipments || [], [
+      { header: "Shipment No", key: "shipmentNo", getValue: (r: any) => r.shipmentNo },
+      { header: "Supplier", key: "supplier", getValue: (r: any) => r.supplierName || "—" },
+      { header: "PO Number", key: "po", getValue: (r: any) => r.poNumber || "—" },
+      { header: "Material", key: "material", getValue: (r: any) => r.material || "—" },
+      { header: "Incoterm", key: "incoterm", getValue: (r: any) => r.incoterm || "—" },
+      { header: "Origin Port", key: "originPort", getValue: (r: any) => r.originPort || "—" },
+      { header: "Destination Port", key: "destPort", getValue: (r: any) => r.destinationPort || "—" },
+      { header: "Transport", key: "transport", getValue: (r: any) => r.transportMode || "—" },
+      { header: "Shipping Line", key: "line", getValue: (r: any) => r.shippingLine || "—" },
+      { header: "Container No", key: "container", getValue: (r: any) => r.containerNo || "—" },
+      { header: "Container Type", key: "ct", getValue: (r: any) => r.containerType || "—" },
+      { header: "BL/AWB", key: "bl", getValue: (r: any) => r.blAwbNumber || "—" },
+      { header: "ETD", key: "etd", getValue: (r: any) => (r.etd ? new Date(r.etd).toLocaleDateString("en-GB") : "—") },
+      { header: "ETA", key: "eta", getValue: (r: any) => (r.eta ? new Date(r.eta).toLocaleDateString("en-GB") : "—") },
+      { header: "ATA", key: "ata", getValue: (r: any) => (r.ata ? new Date(r.ata).toLocaleDateString("en-GB") : "—") },
+      { header: "Status", key: "status", getValue: (r: any) => r.status || "—" },
+      { header: "Priority", key: "priority", getValue: (r: any) => r.priority || "—" },
+      { header: "Cargo Value (USD)", key: "value", getValue: (r: any) => r.cargoValue || 0 },
+      { header: "Weight (kg)", key: "weight", getValue: (r: any) => r.cargoWeight || "—" },
+      { header: "Health Score", key: "health", getValue: (r: any) => r.healthScore ?? "—" },
+    ], `Shipments_${new Date().toISOString().slice(0, 10)}.xlsx`, "Shipments");
+    toast.success("Exported to Excel");
+  };
+  const handlePdfExport = () => {
+    exportToPdf(shipments || [], [
+      { header: "Shipment No", getValue: (r: any) => r.shipmentNo },
+      { header: "Supplier", getValue: (r: any) => r.supplierName || "—" },
+      { header: "Material", getValue: (r: any) => r.material || "—" },
+      { header: "Origin Port", getValue: (r: any) => r.originPort || "—" },
+      { header: "Dest. Port", getValue: (r: any) => r.destinationPort || "—" },
+      { header: "ETA", getValue: (r: any) => (r.eta ? new Date(r.eta).toLocaleDateString("en-GB") : "—") },
+      { header: "Status", getValue: (r: any) => r.status || "—" },
+      { header: "Priority", getValue: (r: any) => r.priority || "—" },
+      { header: "Value (USD)", getValue: (r: any) => r.cargoValue || 0 },
+    ], "Shipment Register Report", `Shipments_${new Date().toISOString().slice(0, 10)}.pdf`);
+    toast.success("Exported to PDF");
+  };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div><h1 className="text-2xl font-bold text-slate-900 font-serif">Shipment Register</h1><p className="text-sm text-slate-500 mt-1">{(shipments||[]).length} total shipments</p></div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleExcelExport}>
+            <FileSpreadsheet className="w-4 h-4 mr-1 text-emerald-600" /> Excel
+          </Button>
+          <Button variant="outline" size="sm" onClick={handlePdfExport}>
+            <Download className="w-4 h-4 mr-1 text-destructive" /> PDF
+          </Button>
+        </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}><DialogTrigger asChild><Button className="bg-blue-700 hover:bg-blue-800"><Plus className="w-4 h-4 mr-1" /> New</Button></DialogTrigger><DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto"><DialogHeader><DialogTitle>{editingId ? "Edit" : "New"} Shipment</DialogTitle></DialogHeader><div className="grid grid-cols-2 gap-3"><div><Label>Shipment No</Label><Input value={formData.shipmentNo} onChange={e => setFormData({...formData, shipmentNo: e.target.value})} /></div><div><Label>Supplier</Label><Input value={formData.supplierName} onChange={e => setFormData({...formData, supplierName: e.target.value})} /></div><div><Label>PO Number</Label><Input value={formData.poNumber} onChange={e => setFormData({...formData, poNumber: e.target.value})} /></div><div><Label>Material</Label><Input value={formData.material} onChange={e => setFormData({...formData, material: e.target.value})} /></div><div><Label>Incoterm</Label><Input value={formData.incoterm} onChange={e => setFormData({...formData, incoterm: e.target.value})} /></div><div><Label>Origin Port</Label><Input value={formData.originPort} onChange={e => setFormData({...formData, originPort: e.target.value})} /></div><div><Label>Destination Port</Label><Input value={formData.destinationPort} onChange={e => setFormData({...formData, destinationPort: e.target.value})} /></div><div><Label>Transport</Label><Select value={formData.transportMode} onValueChange={v => setFormData({...formData, transportMode: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="sea">Sea</SelectItem><SelectItem value="air">Air</SelectItem><SelectItem value="land">Land</SelectItem><SelectItem value="rail">Rail</SelectItem></SelectContent></Select></div><div><Label>Shipping Line</Label><Input value={formData.shippingLine} onChange={e => setFormData({...formData, shippingLine: e.target.value})} /></div><div><Label>BL/AWB</Label><Input value={formData.blAwbNumber} onChange={e => setFormData({...formData, blAwbNumber: e.target.value})} /></div><div><Label>ETD</Label><Input type="date" value={formData.etd?.split('T')[0]||""} onChange={e => setFormData({...formData, etd: e.target.value})} /></div><div><Label>ETA</Label><Input type="date" value={formData.eta?.split('T')[0]||""} onChange={e => setFormData({...formData, eta: e.target.value})} /></div><div><Label>Status</Label><Select value={formData.status} onValueChange={v => setFormData({...formData, status: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="draft">Draft</SelectItem><SelectItem value="confirmed">Confirmed</SelectItem><SelectItem value="in_transit">In Transit</SelectItem><SelectItem value="arrived">Arrived</SelectItem><SelectItem value="customs">Customs</SelectItem><SelectItem value="cleared">Cleared</SelectItem><SelectItem value="delivered">Delivered</SelectItem><SelectItem value="delayed">Delayed</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent></Select></div><div><Label>Priority</Label><Select value={formData.priority} onValueChange={v => setFormData({...formData, priority: v as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="low">Low</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="high">High</SelectItem><SelectItem value="urgent">Urgent</SelectItem></SelectContent></Select></div><div><Label>Cargo Value</Label><Input type="number" value={formData.cargoValue||""} onChange={e => setFormData({...formData, cargoValue: +e.target.value})} /></div><div><Label>Owner</Label><Input value={formData.owner} onChange={e => setFormData({...formData, owner: e.target.value})} /></div></div><div className="flex justify-end gap-2 mt-4"><Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button onClick={handleSubmit}>{editingId ? "Update" : "Create"}</Button></div></DialogContent></Dialog>
       </div>
       <Card className="border-0 shadow-sm"><CardContent className="p-4">

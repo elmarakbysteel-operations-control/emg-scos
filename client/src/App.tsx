@@ -16,6 +16,9 @@ import CostControl from "./pages/CostControl";
 import DocumentsCenter from "./pages/DocumentsCenter";
 import TaskManager from "./pages/TaskManager";
 import ReportsCenter from "./pages/ReportsCenter";
+import FreeTimeAlerts from "./pages/FreeTimeAlerts";
+import BankLCTracking from "./pages/BankLCTracking";
+import DocDiscrepancy from "./pages/DocDiscrepancy";
 import KpiDashboard from "./pages/KpiDashboard";
 import MasterData from "./pages/MasterData";
 import EmailTemplates from "./pages/EmailTemplates";
@@ -36,10 +39,13 @@ function App() {
               <Route path="/" component={Home} />
               <Route path="/operations" component={OperationsDashboard} />
               <Route path="/shipments" component={ShipmentRegister} />
+              <Route path="/alerts" component={FreeTimeAlerts} />
               <Route path="/procurement" component={Procurement} />
               <Route path="/suppliers" component={SupplierManagement} />
               <Route path="/freight" component={FreightManagement} />
+              <Route path="/bank-lc" component={BankLCTracking} />
               <Route path="/customs" component={CustomsManagement} />
+              <Route path="/doc-check" component={DocDiscrepancy} />
               <Route path="/costs" component={CostControl} />
               <Route path="/documents" component={DocumentsCenter} />
               <Route path="/tasks" component={TaskManager} />

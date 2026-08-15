@@ -51,3 +51,31 @@
 - [x] Reports Center: released/cleared count 7/30, avg clearance computed from arrival->release dates
 - [x] Verify API endpoints (shipments/customs/tasks/costs/suppliers.list return 30/30/30/30/10)
 - [x] Visual check of all 19 pages
+
+## Phase 7: Professional Features Upgrade (Session 4)
+### Backend / Schema
+- [x] documents table (documents.* with upload/list/delete via shipmentDocs router: upload (S3), list, delete)
+- [x] bank_lc table (LC/TT tracking per shipment: bank, type, amount, status, dates)
+- [x] document_check table (draft discrepancy review: invoice/BL/COO/packing vs customs fields)
+- [x] API endpoints: shipmentDocs.upload/list/delete, bankLc.*, docCheck.*, alerts.*, tools.freeTimeOverview
+- [x] Free time / demurrage helper: calc freeTimeExpiry from arrival + freeDays, demurrage cost estimator
+- [x] Excel/PDF export helpers (client: exceljs + jspdf-autotable) with seed of 30 arrivalDate/freeTimeDays, 8 LCs ($297,249), ~24 doc checks, 9 demo documents
+
+### Frontend
+- [x] Free Time Alerts page (/alerts): expiry countdown, at-risk shipments, demurrage estimator
+- [x] Shipment documents upload & per-shipment docs in Documents Center (S3 upload)
+- [x] Bank & LC tracking page (/bank-lc)
+- [x] Document Discrepancy Checker page (/doc-check)
+- [x] Expanded Knowledge Center: full Incoterms 2020 + NAFEZA/ACID/UCR + import/export procedures
+- [x] Excel/PDF export buttons in Reports + Shipment Register
+- [x] Notifications bell in dashboard layout (free time + LC alerts)
+- [x] Navigation updates for new pages
+- [x] Fixed chartData (month guard, no null months, animated charts disabled)
+
+### Verification
+- [x] TypeScript 0 errors + vitest pass (1/1 tests passed)
+- [x] Screenshot verification of all new pages (/alerts /bank-lc /doc-check /documents /reports /knowledge)
+- [ ] Checkpoint + deliver
+
+### Verification (done)
+- [x] Checkpoint + deliver

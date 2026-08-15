@@ -8,6 +8,13 @@
       "when": 1785593806463,
       "tag": "0000_glossy_rockslide",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1786833868377,
+      "tag": "0001_keen_cerise",
+      "breakpoints": true
     }
   ]
 }
