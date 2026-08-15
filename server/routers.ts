@@ -19,6 +19,10 @@ export const appRouter = router({
   // Dashboard
   dashboard: router({
     stats: publicProcedure.query(async () => db.getDashboardStats()),
+    chartData: publicProcedure.query(async () => db.getDashboardChartData()),
+    recentActivities: publicProcedure.query(async () => db.getDashboardRecentActivities()),
+    statusBreakdown: publicProcedure.query(async () => db.getDashboardStatusBreakdown()),
+    clearanceOverview: publicProcedure.query(async () => db.getDashboardClearanceOverview()),
   }),
 
   // Shipments

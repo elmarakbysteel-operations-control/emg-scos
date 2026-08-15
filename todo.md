@@ -41,3 +41,13 @@
 ## Phase 5: Deliver
 - [x] Save checkpoint
 - [x] Deliver to user
+
+## Phase 6: Final Data & Dashboard Fixes (Session 3)
+- [x] Insert 30 real shipment records (from pasted_content.txt) into DB with related customs/procurement/tasks/freight/costs rows
+- [x] Fix schema mismatches (landedCost, updatedAt, orderIndex columns)
+- [x] Executive Dashboard (Home): live KPIs from DB (23 active, $176,311 total, 7 cleared, 23 pending), real monthly charts, real status breakdown, NAFEZA/ACID stages, recent activities
+- [x] KPI Dashboard: correct On-Time (100%, no delayed), Customs Clearance 23% (7/30), Active Shipments 23, donut status chart with labels
+- [x] Operations Dashboard: status-aware arrivals/upcoming/overdue logic
+- [x] Reports Center: released/cleared count 7/30, avg clearance computed from arrival->release dates
+- [x] Verify API endpoints (shipments/customs/tasks/costs/suppliers.list return 30/30/30/30/10)
+- [x] Visual check of all 19 pages

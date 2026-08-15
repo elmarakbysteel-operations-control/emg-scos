@@ -15,14 +15,17 @@ export default function KpiDashboard() {
   const { data: costs } = trpc.costs.list.useQuery();
 
   const totalShipments = (shipments || []).length;
-  const deliveredShipments = (shipments || []).filter((s: any) => s.status === "delivered").length;
-  const clearedShipments = (customs || []).filter((c: any) => c.status === "cleared").length;
+  const deliveredShipments = (shipments || []).filter((s: any) => ["delivered", "cleared"].includes(s.status)).length;
+  const delayedShipments = (shipments || []).filter((s: any) => s.status === "delayed").length;
+  const activeShipments = (shipments || []).filter((s: any) => !["delivered", "cancelled"].includes(s.status)).length;
+  const clearedShipments = (customs || []).filter((c: any) => ["cleared", "released"].includes(c.status)).length;
   const totalCustoms = (customs || []).length;
   const completedTasks = (tasks || []).filter((t: any) => t.status === "completed").length;
   const totalTasks = (tasks || []).length;
-  const totalCost = (costs || []).reduce((s: number, c: any) => s + (c.totalCost || 0), 0);
+  const totalCost = (costs || []).reduce((s: number, c: any) => s + (c.totalCost || c.freightCost || 0), 0);
 
-  const onTimeRate = totalShipments > 0 ? Math.round((deliveredShipments / totalShipments) * 100) : 0;
+  // On-time rate: share of shipments with no delay recorded (no delayed status in the portfolio)
+  const onTimeRate = totalShipments > 0 ? Math.round(((totalShipments - delayedShipments) / totalShipments) * 100) : 0;
   const customsRate = totalCustoms > 0 ? Math.round((clearedShipments / totalCustoms) * 100) : 0;
   const taskCompletion = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
   const documentCompliance = 97;
@@ -33,7 +36,7 @@ export default function KpiDashboard() {
     { label: "Task Completion Rate", value: taskCompletion, target: 90, unit: "%", icon: Target, color: taskCompletion >= 90 ? "text-emerald-600" : "text-amber-600" },
     { label: "Total Logistics Cost", value: totalCost, target: 100000, unit: " USD", icon: DollarSign, color: "text-blue-600" },
     { label: "Document Compliance", value: documentCompliance, target: 98, unit: "%", icon: FileCheck, color: documentCompliance >= 98 ? "text-emerald-600" : "text-amber-600" },
-    { label: "Active Shipments", value: totalShipments, target: 20, unit: "", icon: Ship, color: "text-blue-600" },
+    { label: "Active Shipments", value: activeShipments, target: 20, unit: "", icon: Ship, color: "text-blue-600" },
   ];
 
   // Shipment status distribution for pie chart
@@ -81,12 +84,12 @@ export default function KpiDashboard() {
             <h3 className="text-sm font-semibold text-slate-700 mb-3">Shipment Status Distribution</h3>
             <ResponsiveContainer width="100%" height={250}>
               <PieChart>
-                <Pie data={statusCounts} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
-                  {statusCounts.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                <Pie data={statusCounts} cx="50%" cy="50%" innerRadius={45} outerRadius={80} dataKey="value" nameKey="name" paddingAngle={3}>
+                  {statusCounts.map((s, i) => (
+                    <Cell key={s.name} fill={COLORS[i % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip formatter={(v: number, name: string) => [`${v} shipments`, name]} />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
@@ -96,8 +99,9 @@ export default function KpiDashboard() {
             <h3 className="text-sm font-semibold text-slate-700 mb-3">Operational Summary</h3>
             <div className="space-y-3">
               <div className="flex justify-between text-sm"><span className="text-slate-600">Total Shipments</span><span className="font-bold">{totalShipments}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-slate-600">Delivered</span><span className="font-bold text-emerald-600">{deliveredShipments}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-slate-600">Customs Cleared</span><span className="font-bold text-blue-600">{clearedShipments}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-slate-600">Delivered / Cleared</span><span className="font-bold text-emerald-600">{deliveredShipments}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-slate-600">Customs Released / Cleared</span><span className="font-bold text-blue-600">{clearedShipments}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-slate-600">Delayed</span><span className="font-bold text-red-600">{delayedShipments}</span></div>
               <div className="flex justify-between text-sm"><span className="text-slate-600">Tasks Completed</span><span className="font-bold text-blue-700">{completedTasks}/{totalTasks}</span></div>
               <div className="flex justify-between text-sm"><span className="text-slate-600">Total Cost</span><span className="font-bold">${totalCost.toLocaleString()}</span></div>
             </div>

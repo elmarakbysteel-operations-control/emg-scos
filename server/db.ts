@@ -54,9 +54,9 @@ export async function getUserByOpenId(openId: string) {
 
 // ============ Dashboard ============
 export async function getDashboardStats() {
-  const db = await getDb(); if (!db) return { shipments: 0, costs: 0, tasks: 0, delayed: 0 };
+  const db = await getDb(); if (!db) return { activeShipments: 0, totalCosts: 0, pendingTasks: 0, delayed: 0, totalShipments: 0, clearedShipments: 0 };
   const shipmentsResult = await db.select().from(shipments).execute();
-  const tasksResult = await db.select().from(tasks).where(eq(tasks.status, sql`'in_progress'`)).execute();
+  const tasksResult = await db.select().from(tasks).where(sql`status IN ('not_started','in_progress','on_hold')`).execute();
   const costsResult = await db.select().from(costs).execute();
   const delayedShipments = shipmentsResult.filter(s => s.status === 'delayed');
   const totalCosts = costsResult.reduce((sum, c) => sum + (c.totalCost || c.freightCost || 0), 0);
@@ -67,8 +67,62 @@ export async function getDashboardStats() {
     pendingTasks: tasksResult.length,
     delayed: delayedShipments.length,
     totalShipments: shipmentsResult.length,
-    clearedShipments: shipmentsResult.filter(s => s.status === 'cleared').length,
+    clearedShipments: shipmentsResult.filter(s => ['cleared', 'delivered'].includes(s.status || '')).length,
   };
+}
+
+export async function getDashboardChartData() {
+  const db = await getDb(); if (!db) return { monthly: [], monthlyCosts: [] };
+  const allShipments = await db.select().from(shipments).execute();
+  const allCosts = await db.select().from(costs).execute();
+  const monthMap: Record<string, { shipments: number; cost: number }> = {};
+  const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const addRow = (d: Date | null | undefined, cost = 0) => {
+    const key = d ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` : "unknown";
+    if (!monthMap[key]) monthMap[key] = { shipments: 0, cost: 0 };
+    monthMap[key].shipments += 1;
+    monthMap[key].cost += cost;
+  };
+  allShipments.forEach(s => addRow(s.createdAt || s.eta || s.etd));
+  allCosts.forEach(c => addRow((c as any).createdAt, Number((c as any).totalCost || (c as any).freightCost || 0)));
+  const sorted = Object.entries(monthMap).sort((a,b)=>a[0].localeCompare(b[0])).slice(-6);
+  const monthly = sorted.map(([k,v]) => {
+    const [,m] = k.split('-');
+    return { month: monthNames[parseInt(m,10)-1], shipments: v.shipments, cost: Math.round(v.cost*100)/100 };
+  });
+  return { monthly };
+}
+
+export async function getDashboardRecentActivities(limit = 6) {
+  const db = await getDb(); if (!db) return [];
+  const allShipments = await db.select().from(shipments).orderBy(desc(shipments.createdAt)).limit(20).execute();
+  const statusLabels: Record<string,string> = {
+    draft:"إنشاء شحنة جديدة", confirmed:"تأكيد شحنة", in_transit:"شحنة في الطريق", arrived:"وصول الشحنة",
+    customs:"بدء التخليص الجمركي", cleared:"اكتمال التخليص الجمركي", delivered:"تسليم الشحنة", delayed:"تنبيه تأخير",
+    cancelled:"إلغاء شحنة"
+  };
+  return allShipments.slice(0, limit).map(s => ({
+    label: statusLabels[s.status||'draft']||s.status,
+    detail: `${s.shipmentNo} — ${s.material || 'مادة'}`,
+    createdAt: s.createdAt,
+    status: s.status,
+  }));
+}
+
+export async function getDashboardStatusBreakdown() {
+  const db = await getDb(); if (!db) return [];
+  const all = await db.select().from(shipments).execute();
+  const map: Record<string, number> = {};
+  all.forEach(s => { const k = s.status || 'draft'; map[k] = (map[k]||0)+1; });
+  return Object.entries(map).map(([status, count]) => ({ status, count }));
+}
+
+export async function getDashboardClearanceOverview() {
+  const db = await getDb(); if (!db) return { total: 0, pending_acid: 0, acid_issued: 0, under_inspection: 0, released: 0, cleared: 0 };
+  const all = await db.select().from(customs).execute();
+  const out: any = { total: all.length, pending_acid:0, acid_issued:0, under_inspection:0, released:0, cleared:0 };
+  all.forEach(c => { const k = c.status as string; if (k in out) out[k]++; });
+  return out;
 }
 
 // ============ Shipments ============

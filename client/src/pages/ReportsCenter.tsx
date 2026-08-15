@@ -13,10 +13,16 @@ export default function ReportsCenter() {
 
   const totalShipments = (shipments || []).length;
   const totalCost = (costs || []).reduce((s: number, c: any) => s + (c.totalCost || 0), 0);
-  const avgClearance = customs && customs.length > 0
-    ? Math.round(customs.reduce((s: number, c: any) => s + (c.clearanceTime || 0), 0) / customs.length)
-    : 0;
-  const clearedShipments = (customs || []).filter((c: any) => c.status === "cleared").length;
+  const clearedShipments = (customs || []).filter((c: any) => ["cleared", "released"].includes(c.status)).length;
+  // Average clearance days: customs records with both arrival and release/clearance dates
+  const withDuration = (customs || []).filter((c: any) => c.arrivalDate && c.releaseDate);
+  const avgClearanceDays = withDuration.length > 0
+    ? (withDuration.reduce((s: number, c: any) => {
+        const start = new Date(c.arrivalDate).getTime();
+        const end = new Date(c.releaseDate).getTime();
+        return s + Math.max(0, (end - start) / (24 * 60 * 60 * 1000));
+      }, 0) / withDuration.length).toFixed(1)
+    : "—";
 
   const handleGenerate = (reportName: string) => {
     toast.success(`${reportName} report generated successfully`);
@@ -25,7 +31,7 @@ export default function ReportsCenter() {
   const reports = [
     { title: "Shipment Summary", desc: `${totalShipments} total shipments tracked`, icon: Ship, data: totalShipments },
     { title: "Cost Analysis", desc: `Total logistics cost: $${totalCost.toLocaleString()}`, icon: DollarSign, data: totalCost },
-    { title: "Customs Clearance", desc: `Avg clearance time: ${avgClearance} hrs | ${clearedShipments} cleared`, icon: FileText, data: clearedShipments },
+    { title: "Customs Clearance", desc: `Avg clearance: ${avgClearanceDays} days | ${clearedShipments} released/cleared of ${customs?.length || 0}`, icon: FileText, data: clearedShipments },
     { title: "Supplier Performance", desc: `${(suppliers || []).length} active suppliers`, icon: Users, data: (suppliers || []).length },
     { title: "Freight Cost Report", desc: "Freight cost trends by route", icon: BarChart3, data: 0 },
     { title: "Document Compliance", desc: "Document status & gaps analysis", icon: FileText, data: 0 },
@@ -57,7 +63,7 @@ export default function ReportsCenter() {
         </Card>
         <Card className="border-0 shadow-sm">
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-emerald-600">{avgClearance} hrs</p>
+            <p className="text-2xl font-bold text-emerald-600">{avgClearanceDays === "—" ? "—" : `${avgClearanceDays} d`}</p>
             <p className="text-xs text-slate-500 mt-1">Avg Clearance</p>
           </CardContent>
         </Card>
