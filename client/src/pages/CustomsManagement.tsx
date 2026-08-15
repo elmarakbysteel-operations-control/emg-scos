@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { Plus, Edit, Trash2, FileCheck, Search } from "lucide-react";
 import { toast } from "sonner";
 
 export default function CustomsManagement() {
@@ -17,29 +18,159 @@ export default function CustomsManagement() {
   const utils = trpc.useUtils();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState<Record<string, any>>({});
+  const [searchTerm, setSearchTerm] = useState("");
+  const [form, setForm] = useState({
+    shipmentId: null as number | null, acidNumber: "", ucrNumber: "",
+    declarationNumber: "", broker: "", arrivalDate: "", releaseDate: "",
+    clearanceTime: 0, status: "pending_acid" as any, remarks: ""
+  });
 
   const handleSubmit = async () => {
-    try { if (editingId) { await updateMutation.mutateAsync({ id: editingId, ...form }); toast.success("Updated"); } else { await createMutation.mutateAsync(form); toast.success("Created"); } utils.customs.list.invalidate(); setDialogOpen(false); setEditingId(null); } catch { toast.error("Error"); }
+    try {
+      if (editingId) { await updateMutation.mutateAsync({ id: editingId, ...form }); toast.success("Updated successfully"); }
+      else { await createMutation.mutateAsync(form); toast.success("Customs record created"); }
+      utils.customs.list.invalidate(); setDialogOpen(false); setEditingId(null);
+    } catch { toast.error("Error occurred"); }
   };
-  const openEdit = (s: any) => { setEditingId(s.id); setForm({...s}); setDialogOpen(true); };
+
+  const openEdit = (s: any) => { setEditingId(s.id); setForm({ ...s }); setDialogOpen(true); };
+  const handleDelete = async (id: number) => {
+    if (confirm("Are you sure you want to delete this record?")) {
+      await deleteMutation.mutateAsync({ id });
+      utils.customs.list.invalidate();
+      toast.success("Deleted");
+    }
+  };
+
+  const statusColors: Record<string, string> = {
+    pending_acid: "bg-red-100 text-red-700",
+    acid_issued: "bg-amber-100 text-amber-700",
+    arrived: "bg-blue-100 text-blue-700",
+    under_inspection: "bg-purple-100 text-purple-700",
+    duties_paid: "bg-cyan-100 text-cyan-700",
+    cleared: "bg-emerald-100 text-emerald-700",
+    rejected: "bg-gray-100 text-gray-600",
+  };
+
+  const statusLabels: Record<string, string> = {
+    pending_acid: "Pending ACID",
+    acid_issued: "ACID Issued",
+    arrived: "Arrived",
+    under_inspection: "Under Inspection",
+    duties_paid: "Duties Paid",
+    cleared: "Cleared",
+    rejected: "Rejected",
+  };
+
+  const filtered = (items || []).filter((s: any) =>
+    s.acidNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s.ucrNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s.broker?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const formatDate = (d: any) => {
+    if (!d) return "-";
+    const dt = typeof d === "string" ? new Date(d) : d;
+    return dt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between"><div><h1 className="text-2xl font-bold text-slate-900 font-serif">Customs Management</h1><p className="text-sm text-slate-500 mt-1">Manage Customs Management records</p></div><Dialog open={dialogOpen} onOpenChange={setDialogOpen}><DialogTrigger asChild><Button className="bg-blue-700 hover:bg-blue-800"><Plus className="w-4 h-4 mr-1" /> New</Button></DialogTrigger><DialogContent className="max-w-xl max-h-[80vh] overflow-y-auto"><DialogHeader><DialogTitle>{editingId?"Edit":"New"} Customs Management</DialogTitle></DialogHeader><div className="grid grid-cols-2 gap-3">
-<div><Label>acidNumber</Label><Input value={form.acidNumber||""} onChange={e => setForm({...form, acidNumber: e.target.value})} /></div>
-<div><Label>ucrNumber</Label><Input value={form.ucrNumber||""} onChange={e => setForm({...form, ucrNumber: e.target.value})} /></div>
-<div><Label>declarationNumber</Label><Input value={form.declarationNumber||""} onChange={e => setForm({...form, declarationNumber: e.target.value})} /></div>
-<div><Label>broker</Label><Input value={form.broker||""} onChange={e => setForm({...form, broker: e.target.value})} /></div>
-<div><Label>arrivalDate</Label><Input value={form.arrivalDate||""} onChange={e => setForm({...form, arrivalDate: e.target.value})} /></div>
-<div><Label>releaseDate</Label><Input value={form.releaseDate||""} onChange={e => setForm({...form, releaseDate: e.target.value})} /></div>
-<div><Label>clearanceTime</Label><Input value={form.clearanceTime||""} onChange={e => setForm({...form, clearanceTime: e.target.value})} /></div>
-<div><Label>status</Label><Input value={form.status||""} onChange={e => setForm({...form, status: e.target.value})} /></div>
-<div><Label>remarks</Label><Input value={form.remarks||""} onChange={e => setForm({...form, remarks: e.target.value})} /></div>
-</div><div className="flex justify-end gap-2 mt-4"><Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button onClick={handleSubmit}>{editingId?"Update":"Create"}</Button></div></DialogContent></Dialog></div>
-      <Card className="border-0 shadow-sm"><CardContent className="p-4">
-        <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-slate-200"><th className="text-left py-2 px-3 font-semibold text-slate-600">acidNumber</th><th className="text-left py-2 px-3 font-semibold text-slate-600">ucrNumber</th><th className="text-left py-2 px-3 font-semibold text-slate-600">declarationNumber</th><th className="text-left py-2 px-3 font-semibold text-slate-600">broker</th><th className="text-left py-2 px-3 font-semibold text-slate-600">arrivalDate</th><th className="text-left py-2 px-3 font-semibold text-slate-600">releaseDate</th><th className="text-left py-2 px-3 font-semibold text-slate-600">clearanceTime</th><th className="text-left py-2 px-3 font-semibold text-slate-600">status</th><th className="text-left py-2 px-3 font-semibold text-slate-600">remarks</th><th className="text-left py-2 px-3 font-semibold text-slate-600">Actions</th></tr></thead><tbody>{(items||[]).map(s => (<tr key={s.id} className="border-b border-slate-100 hover:bg-slate-50/50"><td className="py-2 px-3 text-slate-600">{s.acidNumber||"-"}</td><td className="py-2 px-3 text-slate-600">{s.ucrNumber||"-"}</td><td className="py-2 px-3 text-slate-600">{s.declarationNumber||"-"}</td><td className="py-2 px-3 text-slate-600">{s.broker||"-"}</td><td className="py-2 px-3 text-slate-600">{s.arrivalDate?(new Date(s.arrivalDate)).toLocaleDateString():"-"}</td><td className="py-2 px-3 text-slate-600">{s.releaseDate?(new Date(s.releaseDate)).toLocaleDateString():"-"}</td><td className="py-2 px-3 text-slate-600">{s.clearanceTime||"-"}</td><td className="py-2 px-3 text-slate-600">{s.status||"-"}</td><td className="py-2 px-3 text-slate-600">{s.remarks||"-"}</td><td className="py-2 px-3"><div className="flex gap-1"><Button size="sm" variant="ghost" onClick={() => openEdit(s)}><Edit className="w-3.5 h-3.5" /></Button><Button size="sm" variant="ghost" onClick={() => { if(confirm("Delete?")){deleteMutation.mutateAsync({id:s.id});utils.customs.list.invalidate();}}}><Trash2 className="w-3.5 h-3.5 text-red-500" /></Button></div></td></tr>))}</tbody></table>{(items||[]).length===0&&!isLoading&&<p className="text-center text-slate-400 py-8">No records</p>}</div>
-      </CardContent></Card>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 font-serif flex items-center gap-2">
+            <FileCheck className="w-6 h-6 text-blue-700" />
+            Customs Management
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">NAFEZA clearance &amp; ACID tracking</p>
+        </div>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-blue-700 hover:bg-blue-800"><Plus className="w-4 h-4 mr-1" /> New Record</Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>{editingId ? "Edit" : "New"} Customs Record</DialogTitle></DialogHeader>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>ACID Number</Label><Input value={form.acidNumber} onChange={e => setForm({ ...form, acidNumber: e.target.value })} placeholder="ACID-2026-001" /></div>
+              <div><Label>UCR Number</Label><Input value={form.ucrNumber} onChange={e => setForm({ ...form, ucrNumber: e.target.value })} placeholder="UCR-MSC-7845621" /></div>
+              <div><Label>Declaration No.</Label><Input value={form.declarationNumber} onChange={e => setForm({ ...form, declarationNumber: e.target.value })} /></div>
+              <div><Label>Customs Broker</Label><Input value={form.broker} onChange={e => setForm({ ...form, broker: e.target.value })} placeholder="Al-Shams Customs Broker" /></div>
+              <div><Label>Arrival Date</Label><Input type="date" value={form.arrivalDate} onChange={e => setForm({ ...form, arrivalDate: e.target.value })} /></div>
+              <div><Label>Release Date</Label><Input type="date" value={form.releaseDate} onChange={e => setForm({ ...form, releaseDate: e.target.value })} /></div>
+              <div><Label>Clearance Time (hours)</Label><Input type="number" value={form.clearanceTime || ""} onChange={e => setForm({ ...form, clearanceTime: +e.target.value })} /></div>
+              <div>
+                <Label>Status</Label>
+                <Select value={form.status} onValueChange={v => setForm({ ...form, status: v as any })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending_acid">Pending ACID</SelectItem>
+                    <SelectItem value="acid_issued">ACID Issued</SelectItem>
+                    <SelectItem value="arrived">Arrived</SelectItem>
+                    <SelectItem value="under_inspection">Under Inspection</SelectItem>
+                    <SelectItem value="duties_paid">Duties Paid</SelectItem>
+                    <SelectItem value="cleared">Cleared</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2"><Label>Remarks</Label><Input value={form.remarks} onChange={e => setForm({ ...form, remarks: e.target.value })} /></div>
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button className="bg-blue-700" onClick={handleSubmit}>{editingId ? "Update" : "Create"}</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <Card className="border-0 shadow-sm">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <Search className="w-4 h-4 text-slate-400" />
+            <Input placeholder="Search by ACID, UCR, or broker..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="max-w-sm" />
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className="text-left py-3 px-3 font-semibold text-slate-600">ACID</th>
+                  <th className="text-left py-3 px-3 font-semibold text-slate-600">UCR</th>
+                  <th className="text-left py-3 px-3 font-semibold text-slate-600">Declaration</th>
+                  <th className="text-left py-3 px-3 font-semibold text-slate-600">Broker</th>
+                  <th className="text-left py-3 px-3 font-semibold text-slate-600">Arrival</th>
+                  <th className="text-left py-3 px-3 font-semibold text-slate-600">Release</th>
+                  <th className="text-left py-3 px-3 font-semibold text-slate-600">Clearance</th>
+                  <th className="text-left py-3 px-3 font-semibold text-slate-600">Status</th>
+                  <th className="text-left py-3 px-3 font-semibold text-slate-600">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((s: any) => (
+                  <tr key={s.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+                    <td className="py-3 px-3 font-medium text-blue-700">{s.acidNumber || "-"}</td>
+                    <td className="py-3 px-3 text-slate-600 font-mono text-xs">{s.ucrNumber || "-"}</td>
+                    <td className="py-3 px-3 text-slate-700">{s.declarationNumber || "-"}</td>
+                    <td className="py-3 px-3 text-slate-600">{s.broker || "-"}</td>
+                    <td className="py-3 px-3 text-slate-600">{formatDate(s.arrivalDate)}</td>
+                    <td className="py-3 px-3 text-slate-600">{formatDate(s.releaseDate)}</td>
+                    <td className="py-3 px-3 text-slate-600">{s.clearanceTime ? `${s.clearanceTime} hrs` : "-"}</td>
+                    <td className="py-3 px-3"><Badge className={`${statusColors[s.status] || "bg-gray-100 text-gray-600"} border-0 text-xs`}>{statusLabels[s.status] || s.status}</Badge></td>
+                    <td className="py-3 px-3">
+                      <div className="flex gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => openEdit(s)}><Edit className="w-3.5 h-3.5" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleDelete(s.id)}><Trash2 className="w-3.5 h-3.5 text-red-500" /></Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {filtered.length === 0 && !isLoading && (
+              <p className="text-center text-slate-400 py-8">No customs records found</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
