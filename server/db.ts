@@ -695,6 +695,22 @@ export function computeFreeTime(s: any) {
   return { expiry: new Date(expiryMs), daysLeft, demurrageDays, atRisk, expired };
 }
 
+export async function refreshHealthScores() {
+  const db = await getDb(); if (!db) return;
+  const all = await db.select().from(shipments).execute();
+  for (const s of all) {
+    const f = computeFreeTime(s);
+    let score = s.healthScore ?? 100;
+    if (f.expired) score = Math.min(score ?? 100, 40);
+    else if (f.atRisk) score = Math.min(score ?? 100, 65);
+    else if (s.status === "delayed") score = Math.min(score ?? 100, 70);
+    else if (s.status === "arrived" || s.status === "customs") score = Math.min(score ?? 100, 85);
+    if (score !== (s.healthScore ?? 100)) {
+      try { await db.update(shipments).set({ healthScore: score }).where(eq(shipments.id, s.id)).execute(); } catch (e) { console.error("[healthScore]", e); }
+    }
+  }
+}
+
 export async function regenerateFreeTimeAlerts() {
   const db = await getDb(); if (!db) return;
   const all = await db.select().from(shipments).execute();

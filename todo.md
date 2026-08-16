@@ -89,3 +89,26 @@
 - [x] E2E verified (doc 60001 → 24 fields extracted, applied to shipment 30001 correctly)
 - [x] TypeScript 0 errors + vitest pass + screenshots
 - [x] Checkpoint + deliver (pending)
+
+## Phase 9: System Enhancements (Session 6) — Auto-monitoring & Quality
+
+### Scheduled Automation
+- [ ] Heartbeat handler /api/scheduled/daily-free-time-refresh: recomputes freeTimeExpiry + generates alert_log entries daily
+- [ ] Register project-level cron via manus-heartbeat CLI (daily 06:00 UTC)
+- [ ] HealthScore auto-update: shipments past freeTime expiry or delayed lower score
+
+### Data Quality & Automation
+- [ ] Auto-create default tasks when shipment moves to "arrived" status (customs docs prep, broker notify)
+- [ ] Free Time calculation API consistency: arrivalDate + freeTimeDays → expiry everywhere (overview + register + alerts)
+- [ ] Demo shipment 30001 demo-data cleanup (test artifacts)
+
+### Testing
+- [ ] Vitest: shipments API read/write round-trip, freeTime calc unit tests, export helpers smoke tests
+- [ ] Update existing test file with core business tests
+
+### Frontend Polish
+- [ ] Export button per-page consistency (procurement/freight/customs missing)
+- [ ] Loading skeletons on KPI cards for smoother perceived performance
+
+### Verification & Deliver
+- [ ] TypeScript + vitest + screenshots, checkpoint, deliver
