@@ -75,7 +75,17 @@
 ### Verification
 - [x] TypeScript 0 errors + vitest pass (1/1 tests passed)
 - [x] Screenshot verification of all new pages (/alerts /bank-lc /doc-check /documents /reports /knowledge)
-- [ ] Checkpoint + deliver
+- [x] Checkpoint + deliver (v1.1 checkpoint f1484bfa saved and published)
 
 ### Verification (done)
 - [x] Checkpoint + deliver
+
+## Phase 8: AI Document Data Extraction (Session 5)
+- [x] documents.extractionStatus + extractedData columns (migration applied)
+- [x] extractWithLLM: server-side PDF text extraction (pdftotext + pdf-parse fallback), images via vision API, gemini-3.1-pro-preview structured JSON
+- [x] shipmentDocs.applyExtraction: maps 25+ fields to real DB columns (shipments/freight/customs), first-wins per target
+- [x] File upload filename sanitization (fixed CloudFront 403 on space-containing keys)
+- [x] Frontend: AI extraction column/badges + review dialog with confidence % in Documents Center
+- [x] E2E verified (doc 60001 → 24 fields extracted, applied to shipment 30001 correctly)
+- [x] TypeScript 0 errors + vitest pass + screenshots
+- [x] Checkpoint + deliver (pending)

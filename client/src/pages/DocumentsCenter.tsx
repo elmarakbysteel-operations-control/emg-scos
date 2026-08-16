@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import {
   Plus, Pencil, Trash2, FileText, AlertTriangle, Search, Upload, ExternalLink,
-  FileType, FileSpreadsheet, Image as ImageIcon, FileArchive,
+  FileType, FileSpreadsheet, Image as ImageIcon, FileArchive, Sparkles, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -55,7 +55,33 @@ export default function DocumentsCenter() {
     onSuccess: () => { utils.documents.list.invalidate(); utils.shipmentDocs.list.invalidate(); toast.success("تم رفع الملف بنجاح"); setUploadDialog(false); setFile(null); setUploading(false); },
     onError: () => { toast.error("فشل رفع الملف"); setUploading(false); },
   });
+  const extractMutation = trpc.shipmentDocs.extract.useMutation({
+    onSuccess: (data) => { setExtracted({ docId: lastExtractDocId ?? 0, fields: data.fields || [], summary: data.summary || "", docType: data.docType }); setExtractDialog(true); utils.documents.list.invalidate(); toast.success("تم استخراج البيانات بنجاح — راجع النتائج قبل الاعتماد"); },
+    onError: (e) => { utils.documents.list.invalidate(); toast.error(e.message); },
+  });
+  const applyMutation = trpc.shipmentDocs.applyExtraction.useMutation({
+    onSuccess: () => { utils.documents.list.invalidate(); utils.shipments.list.invalidate(); toast.success("تم الاعتماد وحفظ البيانات في سجل الشحنات"); setExtractDialog(false); setExtracted(null); },
+    onError: () => toast.error("فشل حفظ البيانات المستخرجة"),
+  });
   const utils = trpc.useUtils();
+
+  // AI extraction review state
+  const [extractDialog, setExtractDialog] = useState(false);
+  const [lastExtractDocId, setLastExtractDocId] = useState<number | null>(null);
+  const [extracted, setExtracted] = useState<{ docId: number; fields: { fieldName: string; value: string; confidence: number }[]; summary: string; docType: string } | null>(null);
+  const [editFieldIdx, setEditFieldIdx] = useState<number | null>(null);
+  const [editFieldValue, setEditFieldValue] = useState("");
+
+  const handleExtract = (doc: any) => {
+    setLastExtractDocId(doc.id);
+    setExtracted(null);
+    extractMutation.mutate({ id: doc.id });
+  };
+  const handleApply = () => {
+    if (!extracted) return;
+    const active = extracted.fields.filter(f => String(f.value || "").trim() !== "");
+    applyMutation.mutate({ id: extracted.docId, fields: active });
+  };
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -180,6 +206,7 @@ export default function DocumentsCenter() {
                     <TableHead>الشحنة</TableHead>
                     <TableHead>الإصدار</TableHead>
                     <TableHead>الحالة</TableHead>
+                    <TableHead>الذكاء الاصطناعي</TableHead>
                     <TableHead>تاريخ الرفع</TableHead>
                     <TableHead>الانتهاء</TableHead>
                     <TableHead>إجراءات</TableHead>
@@ -198,6 +225,21 @@ export default function DocumentsCenter() {
                       <TableCell className="font-mono text-xs">{s.shipmentId ? shipName(s.shipmentId) : "—"}</TableCell>
                       <TableCell className="text-xs">{s.version || "—"}</TableCell>
                       <TableCell><Badge className={statusColor[s.status] || "bg-slate-400 text-white"}>{statusAr[s.status] || s.status}</Badge></TableCell>
+                      <TableCell>
+                        {extractMutation.isPending && lastExtractDocId === s.id ? (
+                          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-400"><Loader2 className="h-3 w-3 ml-1 animate-spin" />قراءة الملف...</Badge>
+                        ) : s.extractionStatus === "done" && s.extractedData ? (
+                          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-400 cursor-pointer" onClick={() => { setLastExtractDocId(s.id); setExtracted(JSON.parse(s.extractedData)); setExtractDialog(true); }}><Sparkles className="h-3 w-3 ml-1" />بيانات مستخرجة</Badge>
+                        ) : s.extractionStatus === "failed" ? (
+                          <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/40">فشل الاستخراج</Badge>
+                        ) : (s.fileUrl && (s.docType === "commercial_invoice" || s.docType === "bill_of_lading" || s.docType === "certificate_of_origin" || s.docType === "packing_list")) ? (
+                          <Button variant="outline" size="sm" className="h-6 gap-1 text-xs" onClick={() => handleExtract(s)}><Sparkles className="h-3 w-3" />استخراج بالذكاء الاصطناعي</Button>
+                        ) : s.extractionStatus === "running" ? (
+                          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-400"><Loader2 className="h-3 w-3 ml-1 animate-spin" />قراءة الملف...</Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-xs">{fmtDate(s.uploadDate)}</TableCell>
                       <TableCell className="text-xs">{fmtDate(s.expiryDate)}</TableCell>
                       <TableCell>
@@ -262,6 +304,70 @@ export default function DocumentsCenter() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
             <Button onClick={handleSubmit}>{editingId ? "حفظ التعديلات" : "تسجيل"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Extraction review dialog */}
+      <Dialog open={extractDialog} onOpenChange={o => { if (!o && !applyMutation.isPending) setExtractDialog(false); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-violet-500" /> مراجعة البيانات المستخرجة بالذكاء الاصطناعي</DialogTitle>
+            <DialogDescription>{extracted?.summary || "راجِع الحقول المستخرجة من المستند وعدّل أي قيمة غير صحيحة قبل الاعتماد"}</DialogDescription>
+          </DialogHeader>
+          {extracted ? (
+            <div className="space-y-3">
+              <Badge className="bg-violet-100 text-violet-700 border-violet-300">نوع المستند: {docAr[extracted.docType] || extracted.docType}</Badge>
+              <div className="border rounded-md overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>الحقل</TableHead>
+                      <TableHead>القيمة المستخرجة</TableHead>
+                      <TableHead>الثقة</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {extracted.fields.map((f, i) => (
+                      <TableRow key={i} className={f.confidence < 70 ? "bg-amber-50/50" : ""}>
+                        <TableCell className="text-xs font-medium whitespace-nowrap">{f.fieldName}</TableCell>
+                        <TableCell>
+                          {editFieldIdx === i ? (
+                            <div className="flex gap-1">
+                              <Input className="h-7 text-xs" value={editFieldValue} onChange={e => setEditFieldValue(e.target.value)} autoFocus onKeyDown={e => { if (e.key === "Enter") { extracted.fields[i].value = editFieldValue; setEditFieldIdx(null); } }} />
+                              <Button size="sm" className="h-7 px-2 text-xs" onClick={() => { extracted.fields[i].value = editFieldValue; setEditFieldIdx(null); }}>✓</Button>
+                            </div>
+                          ) : (
+                            <span className={f.value ? "font-mono text-xs" : "text-muted-foreground text-xs italic"}>{f.value || "لم يُعثر عليه"}</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="w-14 h-1.5 rounded-full bg-muted overflow-hidden">
+                              <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, f.confidence))}%`, background: f.confidence >= 80 ? "#10b981" : f.confidence >= 60 ? "#f59e0b" : "#ef4444" }} />
+                            </div>
+                            <span className="text-xs text-muted-foreground">{Math.round(f.confidence)}%</span>
+                            {f.value && editFieldIdx !== i && (
+                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setEditFieldIdx(i); setEditFieldValue(f.value); }}><Pencil className="h-3 w-3" /></Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <p className="text-xs text-muted-foreground">الحقول ذات الثقة المنخفضة مظللة بالبرتقالي — يُنصح بمراجعتها يدويًا. سيتم تحديث الشحنة (بيانات الفاتورة/الشحن/الجمارك) بالسجلات المطابقة للحقول أعلاه.</p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground py-6 text-center">جاري استخراج البيانات...</p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExtractDialog(false)}>إلغاء</Button>
+            <Button onClick={handleApply} disabled={!extracted || applyMutation.isPending}>
+              {applyMutation.isPending ? <Loader2 className="h-4 w-4 ml-1 animate-spin" /> : <Sparkles className="h-4 w-4 ml-1" />}
+              اعتماد وحفظ في سجل الشحنات
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

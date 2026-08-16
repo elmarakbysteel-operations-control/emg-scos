@@ -191,6 +191,8 @@ export const documents = mysqlTable("documents", {
   status: mysqlEnum("status", ["pending", "uploaded", "verified", "rejected", "missing"]).default("pending"),
   expiryDate: timestamp("expiryDate"),
   remarks: text("remarks"),
+  extractionStatus: mysqlEnum("extractionStatus", ["none", "running", "done", "failed"]).default("none"),
+  extractedData: text("extractedData"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

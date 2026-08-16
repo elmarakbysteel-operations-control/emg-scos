@@ -179,13 +179,25 @@ export const appRouter = router({
     upload: publicProcedure.input(z.object({ fileName: z.string(), mimeType: z.string(), base64: z.string(), shipmentId: z.number(), docType: z.string().optional() })).mutation(async ({ input }) => {
       const buffer = Buffer.from(input.base64, "base64");
       const ext = input.fileName.includes(".") ? input.fileName.split(".").pop() : "bin";
-      const key = `shipment-docs/${input.shipmentId}/${Date.now()}-${input.fileName}`;
+      const safeName = (input.fileName || "file").trim().replace(/[^A-Za-z0-9._-]/g, "_").replace(/_+/g, "_").slice(-120);
+      const key = `shipment-docs/${input.shipmentId}/${Date.now()}-${safeName}`;
       const { storagePut } = await import("./storage");
       const { url } = await storagePut(key, buffer, input.mimeType || "application/octet-stream");
       const rec = await db.createDocument({ shipmentId: input.shipmentId, docType: input.docType || "other", fileName: input.fileName, fileUrl: url, uploadDate: new Date(), version: "1.0", status: "uploaded" });
       return { id: (rec as any).id, url };
     }),
     list: publicProcedure.input(z.object({ shipmentId: z.number() })).query(async ({ input }) => db.getDocumentsByShipment(input.shipmentId)),
+    extract: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      await db.updateDocument(input.id, { extractionStatus: "running" });
+      try {
+        const result = await db.extractWithLLM(input.id);
+        return { success: true, ...result };
+      } catch (err: any) {
+        await db.updateDocument(input.id, { extractionStatus: "failed" });
+        throw new Error(err?.message || "AI extraction failed");
+      }
+    }),
+    applyExtraction: publicProcedure.input(z.object({ id: z.number(), fields: z.array(z.object({ fieldName: z.string(), value: z.string(), confidence: z.number().optional() })) })).mutation(async ({ input }) => db.applyExtraction(input.id, input.fields)),
   }),
 });
 

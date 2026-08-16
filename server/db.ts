@@ -271,6 +271,181 @@ export async function deleteDocument(id: number) {
   return { id };
 }
 
+// ============ AI Document Extraction ============
+const EXTRACTION_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    docType: {
+      type: "string",
+      description: "One of: commercial_invoice, bill_of_lading, certificate_of_origin, packing_list",
+    },
+    fields: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          fieldName: { type: "string", description: "Exact field key, e.g. invoiceNumber, blNumber, acidNumber" },
+          value: { type: "string", description: "Extracted value as string; empty string if not found" },
+          confidence: { type: "number", description: "0-100 confidence score" },
+        },
+        required: ["fieldName", "value", "confidence"],
+        additionalProperties: false,
+      },
+    },
+    summary: { type: "string", description: "One-line Arabic summary of what the document is" },
+  },
+  required: ["docType", "fields", "summary"],
+  additionalProperties: false,
+};
+
+const SHIPMENT_FIELD_MAP: Record<string, { table: "shipment" | "freight" | "customs"; key: string }> = {
+  piNumber: { table: "shipment", key: "poNumber" },
+  invoiceNumber: { table: "shipment", key: "poNumber" },
+  supplier: { table: "shipment", key: "supplierName" },
+  invoiceValue: { table: "shipment", key: "cargoValue" },
+  currency: { table: "shipment", key: "currency" },
+  incoterm: { table: "shipment", key: "incoterm" },
+  blNumber: { table: "freight", key: "blNumber" },
+  carrier: { table: "freight", key: "shippingLine" },
+  eta: { table: "freight", key: "eta" },
+  etd: { table: "freight", key: "etd" },
+  containerNumber: { table: "freight", key: "containerNo" },
+  containerType: { table: "freight", key: "containerType" },
+  totalWeight: { table: "shipment", key: "weight" },
+  grossWeight: { table: "shipment", key: "weight" },
+  netWeight: { table: "shipment", key: "weight" },
+  acidNumber: { table: "customs", key: "acidNumber" },
+  ucrNumber: { table: "customs", key: "ucrNumber" },
+  portOfLoading: { table: "freight", key: "originPort" },
+  portOfDischarge: { table: "freight", key: "destinationPort" },
+  description: { table: "shipment", key: "material" },
+  countryOfOrigin: { table: "shipment", key: "originCountry" },
+};
+
+export async function getDocumentById(id: number) {
+  const db = await getDb(); if (!db) throw new Error("DB unavailable");
+  const rows = await db.select().from(documents).where(eq(documents.id, id)).limit(1).execute();
+  return rows[0];
+}
+
+// Extract raw text from a document file (signed URL) — server-side, before LLM call
+async function extractTextFromDocument(doc: any): Promise<string> {
+  const { storageGetSignedUrl } = await import("./storage");
+  const key = doc.fileUrl.replace(/^\/manus-storage\//, "");
+  const signedUrl = await storageGetSignedUrl(key);
+  const ext = (doc.fileName || "").toLowerCase().split(".").pop();
+  const isPdf = ext === "pdf" || ext === "PDF";
+  const resp = await fetch(signedUrl);
+  if (!resp.ok) throw new Error(`Failed to download document file (${resp.status})`);
+  const buffer = Buffer.from(await resp.arrayBuffer());
+  if (isPdf) {
+    // Prefer pdftotext for scanned-friendly PDFs; fallback to pdf-parse
+    try {
+      const { execFileSync } = await import("child_process");
+      const out = execFileSync("pdftotext", ["-", "-"], { input: buffer, timeout: 30000, maxBuffer: 5 * 1024 * 1024 }).toString("utf8");
+      if (out && out.trim().length > 5) return out;
+    } catch { /* fall through to pdf-parse */ }
+    try {
+      const pdfMod = await import("pdf-parse");
+      const parser = new (pdfMod as any).PDFParse({ data: buffer });
+      const textResult = await parser.getText();
+      parser.destroy().catch(() => {});
+      return textResult?.text || "";
+    } catch (e) {
+      throw new Error("PDF text extraction failed");
+    }
+  }
+  // Image/text docs: return as base64 hint for LLM (base64 data URI as text)
+  return `Document text could not be parsed as PDF. File size: ${buffer.length} bytes. Filename: ${doc.fileName}.`; // images require vision — handled separately below
+}
+
+export async function extractWithLLM(docId: number): Promise<any> {
+  const doc = await getDocumentById(docId);
+  if (!doc) throw new Error("Document not found");
+  if (!doc.fileUrl) throw new Error("Document has no file");
+  const { invokeLLM } = await import("./_core/llm");
+  await updateDocument(docId, { extractionStatus: "running" });
+  const ext = (doc.fileName || "").toLowerCase().split(".").pop();
+  const isImage = ["png", "jpg", "jpeg", "webp", "gif"].includes(ext || "");
+  let userContent: any[];
+  if (isImage) {
+    const { storageGetSignedUrl } = await import("./storage");
+    const signedUrl = await storageGetSignedUrl(doc.fileUrl.replace(/^\/manus-storage\//, ""));
+    userContent = [
+      { type: "image_url", image_url: { url: signedUrl } },
+      { type: "text", text: "Extract all structured fields from this shipping document." },
+    ];
+  } else {
+    const text = await extractTextFromDocument(doc);
+    if (!text || text.trim().length < 5) throw new Error("Could not extract readable text from the document");
+    userContent = [{ type: "text", text: `Extract all structured fields from this shipping document (raw text below):\n\n${text}` }];
+  }
+  const response = await invokeLLM({
+    model: "gemini-3.1-pro-preview",
+    maxTokens: 4000,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are an expert freight documentation data extraction specialist for an Egyptian international shipping & customs clearance operation (Almarakby Group, steel/metals/refractories imports). Extract structured fields from the shipping document (commercial invoice, bill of lading, certificate of origin, or packing list). Return values EXACTLY as printed on the document. Use empty string for fields not found. Confidence 0-100. Field names must use these exact keys where applicable: piNumber, invoiceNumber, supplier, invoiceValue, currency, incoterm, blNumber, carrier, vessel, eta, etd, containerNumber, containerType, containerCount, totalWeight, grossWeight, netWeight, acidNumber, ucrNumber, hsCode, portOfLoading, portOfDischarge, description, countryOfOrigin, consignee, notifyParty, shipper, blDate, invoiceDate, numPackages, marks. eta/etd format: YYYY-MM-DD.",
+      },
+      { role: "user", content: userContent },
+    ],
+    response_format: { type: "json_schema", json_schema: { name: "shipping_doc_extraction", strict: true, schema: EXTRACTION_SCHEMA } },
+  });
+  const raw = response.choices?.[0]?.message?.content;
+  if (!raw) throw new Error("Empty extraction response");
+  const text = typeof raw === "string" ? raw : (raw.find((p: any) => p.type === "text") as { text: string } | undefined)?.text || "";
+  if (!text.trim()) throw new Error("Empty extraction response");
+  const parsed = JSON.parse(text);
+  await updateDocument(docId, {
+    extractionStatus: "done",
+    extractedData: JSON.stringify({ docType: parsed.docType, fields: parsed.fields, summary: parsed.summary }),
+    docType: parsed.docType || doc.docType,
+  });
+  return { docType: parsed.docType, fields: parsed.fields, summary: parsed.summary };
+}
+
+export async function applyExtraction(docId: number, fields: any[]) {
+  const db = await getDb(); if (!db) throw new Error("DB unavailable");
+  const doc = await getDocumentById(docId);
+  if (!doc || !doc.shipmentId) throw new Error("Document or shipment not found");
+  const shipmentId = doc.shipmentId;
+  const shipmentUpdate: any = {};
+  const freightUpdate: any = {};
+  const customsUpdate: any = {};
+  const applied: any[] = [];
+  const appliedKeys = new Set<string>();
+  for (const f of fields || []) {
+    const mapping = SHIPMENT_FIELD_MAP[f.fieldName];
+    if (!mapping || !f.value || String(f.value).trim() === "") continue;
+    const targetKey = `${mapping.table}.${mapping.key}`;
+    if (appliedKeys.has(targetKey)) continue; // first mapping wins per target column (e.g. piNumber takes precedence over invoiceNumber for poNumber)
+    appliedKeys.add(targetKey);
+    applied.push({ ...f });
+    if (mapping.table === "shipment") {
+      if (mapping.key === "cargoValue") shipmentUpdate[mapping.key] = parseFloat(String(f.value).replace(/[^0-9.\-]/g, "")) || f.value;
+      else if (mapping.key === "weight") shipmentUpdate[mapping.key] = parseFloat(String(f.value).replace(/[^0-9.\-]/g, "")) || f.value;
+      else shipmentUpdate[mapping.key] = f.value;
+    } else if (mapping.table === "freight") {
+      if (["eta", "etd"].includes(mapping.key)) freightUpdate[mapping.key] = new Date(f.value);
+      else if (mapping.key === "blNumber") freightUpdate[mapping.key] = f.value;
+      else if (["totalWeight", "grossWeight", "netWeight"].includes(mapping.key)) freightUpdate[mapping.key] = parseFloat(String(f.value).replace(/[^0-9.\-]/g, "")) || f.value;
+      else freightUpdate[mapping.key] = f.value;
+    } else {
+      customsUpdate[mapping.key] = f.value;
+    }
+  }
+  if (Object.keys(shipmentUpdate).length)
+    await db.update(shipments).set(shipmentUpdate).where(eq(shipments.id, shipmentId)).execute();
+  if (Object.keys(freightUpdate).length)
+    await db.update(freight).set(freightUpdate).where(eq(freight.shipmentId, shipmentId)).execute();
+  if (Object.keys(customsUpdate).length)
+    await db.update(customs).set(customsUpdate).where(eq(customs.shipmentId, shipmentId)).execute();
+  await db.update(documents).set({ status: "verified" }).where(eq(documents.id, docId)).execute();
+  return { applied, shipmentId };
+}
+
 // ============ Tasks ============
 export async function getTasks() {
   const db = await getDb(); if (!db) return [];
