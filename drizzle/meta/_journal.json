@@ -22,6 +22,20 @@
       "when": 1786856136618,
       "tag": "0002_cynical_kid_colt",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1786867362046,
+      "tag": "0003_strange_mastermind",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1786867451288,
+      "tag": "0004_known_luckman",
+      "breakpoints": true
     }
   ]
 }

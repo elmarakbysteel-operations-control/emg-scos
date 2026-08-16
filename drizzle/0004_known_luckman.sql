@@ -1,0 +1,1 @@
+ALTER TABLE `alert_log` ADD `notified` enum('yes','no') DEFAULT 'no' NOT NULL;

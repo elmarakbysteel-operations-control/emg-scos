@@ -45,6 +45,13 @@ export const appRouter = router({
               await db.createTask({ shipmentId: id, title: t, description: "مهمة تلقائية: أنشئت عند وصول الشحنة", priority: "high", status: "not_started", dueDate: new Date(Date.now() + 3 * 86400000) });
             }
           }
+          // Notify the owner immediately when a shipment arrives (respects preferences)
+          const shipment = await db.getShipmentById(id);
+          if (shipment) {
+            await db.pushEventNotification("shipment_arrived",
+              `[EMG-SCOS] وصول شحنة جديدة: ${shipment.shipmentNo}`,
+              `وصلت الشحنة ${shipment.shipmentNo} — تم إنشاء مهام التخليص التلقائية (إشعار الوكيل + إعداد المستندات).`);
+          }
         } catch (e) { console.error("[auto-tasks]", e); }
       }
       return result;
@@ -171,7 +178,18 @@ export const appRouter = router({
   // Document Discrepancy Checker
   docCheck: router({
     list: publicProcedure.query(async () => db.getDocChecks()),
-    create: publicProcedure.input(z.any()).mutation(async ({ input }) => db.createDocCheck(input)),
+    create: publicProcedure.input(z.any()).mutation(async ({ input }) => {
+      const result = await db.createDocCheck(input);
+      if (input.matches === "mismatch" || input.matches === "missing") {
+        try {
+          const shipment = await db.getShipmentById(input.shipmentId);
+          await db.pushEventNotification("discrepancy_found",
+            `[EMG-SCOS] تناقض مستندي: ${shipment?.shipmentNo ?? "شحنة #" + input.shipmentId}`,
+            `توثيق ${input.docName ?? input.docType ?? "—"} — الحقل ${input.fieldName ?? "—"}: المتوقع "${input.expectedValue ?? ""}" بينما الفعلي "${input.actualValue ?? ""}" (الخطورة: ${input.severity ?? "medium"}).`);
+        } catch (e) { console.error("[discrepancy-notify]", e); }
+      }
+      return result;
+    }),
     update: publicProcedure.input(z.any()).mutation(async ({ input }) => { const { id, ...data } = input; return db.updateDocCheck(id, data); }),
     delete: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => db.deleteDocCheck(input.id)),
   }),
@@ -192,6 +210,16 @@ export const appRouter = router({
     seedKnowledge: publicProcedure.mutation(async () => { await db.seedExpandedKnowledge(); return { success: true }; }),
   }),
 
+  // Custom Notifications
+  notifications: router({
+    settings: publicProcedure.query(async () => db.getNotificationSettings()),
+    updateSetting: publicProcedure.input(z.object({ eventKey: z.string(), enabled: z.enum(["yes", "no"]) })).mutation(async ({ input }) => db.updateNotificationSetting(input.eventKey, input.enabled)),
+    test: publicProcedure.mutation(async () => {
+      const ok = await db.pushEventNotification("free_time_expiry", "[EMG-SCOS] اختبار الإشعارات", "هذا إشعار تجريبي — يعمل نظام الإشعارات المخصصة بنجاح. يمكنك تخصيص أنواع الإشعارات من صفحة الإعدادات.");
+      return { success: ok };
+    }),
+    sendDigest: publicProcedure.mutation(async () => db.sendSmartNotifications({ lookbackMinutes: 60 * 24 * 7 })),
+  }),
   // Document Upload (S3)
   shipmentDocs: router({
     upload: publicProcedure.input(z.object({ fileName: z.string(), mimeType: z.string(), base64: z.string(), shipmentId: z.number(), docType: z.string().optional() })).mutation(async ({ input }) => {

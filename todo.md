@@ -112,3 +112,14 @@
 
 ### Verification & Deliver
 - [x] Final verification: tsc OK, 15/15 vitest passing, screenshots verified (KPI fixed, Register 30 rows + Free Time column, exports on Procurement/Freight/Customs), cron job confirmed enabled (daily 06:00 UTC)
+
+### Custom Notifications (v1.3)
+- [x] notification_settings table in drizzle/schema.ts + SQL migration applied (per-event push toggle)
+- [x] sendSmartNotifications helper in server/db.ts (notifyOwner digest, enabled-flag check, 60-min lookback dedupe) + pushEventNotification
+- [x] Wire sendSmartNotifications into daily scheduled handler after alert regeneration (returns notifications result)
+- [x] notifications tRPC router (settings / updateSetting / test / sendDigest) + appRouter
+- [x] Settings page UI: live per-event toggles (7 event types, Arabic/English labels) + test-notification + send-pending-digest buttons
+- [x] Event hooks: pushEventNotification(shipment_arrived) on status→arrived; pushEventNotification(discrepancy_found) on docCheck mismatch/missing create
+- [x] Vitest: notification settings seed/toggle + per-alert dedupe + disabled-event blocking (18/18 passing)
+- [x] Real dedupe: alert_log.notified flag (migration applied) — repeated runs never resend the same digest
+- [x] Final verification: tsc 0 errors, 19/19 vitest passing, /settings screenshot verified with all 7 event toggles

@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { sdk } from "./_core/sdk";
-import { regenerateFreeTimeAlerts, refreshHealthScores } from "./db";
+import { regenerateFreeTimeAlerts, refreshHealthScores, sendSmartNotifications } from "./db";
 
 // Idempotent daily job: recomputes Free Time expiry for all shipments,
 // refreshes health scores, and generates Free Time / LC alerts.
@@ -13,7 +13,10 @@ export async function dailyFreeTimeRefreshHandler(req: Request, res: Response) {
     await regenerateFreeTimeAlerts();
     await refreshHealthScores();
 
-    return res.json({ ok: true, timestamp: new Date().toISOString() });
+    // Push a throttled digest of newly created alerts to the project owner
+    const notif = await sendSmartNotifications();
+
+    return res.json({ ok: true, timestamp: new Date().toISOString(), notifications: notif });
   } catch (error) {
     console.error("[daily-free-time-refresh]", error);
     return res.status(500).json({

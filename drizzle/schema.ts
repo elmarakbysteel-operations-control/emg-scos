@@ -297,6 +297,7 @@ export const alertLog = mysqlTable("alert_log", {
   message: text("message"),
   severity: mysqlEnum("severity", ["low", "medium", "high", "critical"]).default("medium"),
   read: mysqlEnum("read", ["yes", "no"]).default("no").notNull(),
+  notified: mysqlEnum("notified", ["yes", "no"]).default("no").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -311,6 +312,14 @@ export const auditLog = mysqlTable("audit_log", {
 });
 
 // Settings
+// Notification preferences: per-event push toggle for owner notifications
+export const notificationSettings = mysqlTable("notification_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  eventKey: varchar("eventKey", { length: 80 }).notNull(),
+  enabled: mysqlEnum("enabled", ["yes", "no"]).default("yes").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export const settings = mysqlTable("settings", {
   id: int("id").autoincrement().primaryKey(),
   category: varchar("category", { length: 100 }),

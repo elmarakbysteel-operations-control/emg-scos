@@ -4,7 +4,7 @@ import {
   users, shipments, procurement, freight, customs, costs,
   documents, tasks, suppliers, emailTemplates, knowledge,
   auditLog, settings, companies, plants, departments,
-  bankLc, docCheck, alertLog
+  bankLc, docCheck, alertLog, notificationSettings
 } from "../drizzle/schema";
 import { InsertUser } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -663,6 +663,128 @@ export async function deleteDocCheck(id: number) {
   const db = await getDb(); if (!db) throw new Error("DB unavailable");
   await db.delete(docCheck).where(eq(docCheck.id, id)).execute();
   return { id };
+}
+
+// ============ Notification Preferences ============
+// Supported event keys — each toggle maps to alertTypes in alert_log
+export const NOTIFICATION_EVENT_KEYS = [
+  "free_time_expiry",      // Free Time ينتهي خلال 7 أيام
+  "demurrage_risk",        // انتهاء السماح المجاني + خطر Demurrage
+  "lc_expiry",             // انتهاء/اقتراب صلاحية الاعتماد المستندي
+  "eta_overdue",           // تأخر وصول الشحنة عن ETA
+  "document_missing",      // نقص مستندات
+  "shipment_arrived",      // وصول شحنة جديدة
+  "discrepancy_found",     // اكتشاف تناقض مستندي
+] as const;
+export type NotificationEventKey = (typeof NOTIFICATION_EVENT_KEYS)[number];
+
+export async function getNotificationSettings() {
+  const db = await getDb(); if (!db) return [];
+  const rows = await db.select().from(notificationSettings).execute();
+  // Guarantee every defined key has a row (defaults enabled)
+  const found = new Set(rows.map(r => r.eventKey));
+  for (const key of NOTIFICATION_EVENT_KEYS) {
+    if (!found.has(key)) {
+      try { await db.insert(notificationSettings).values({ eventKey: key, enabled: "yes" }).execute(); } catch (e) { console.error("[notificationSettings] seed", e); }
+    }
+  }
+  return db.select().from(notificationSettings).execute();
+}
+
+export async function updateNotificationSetting(eventKey: string, enabled: "yes" | "no") {
+  const db = await getDb(); if (!db) throw new Error("DB unavailable");
+  if (!NOTIFICATION_EVENT_KEYS.includes(eventKey as NotificationEventKey)) {
+    throw new Error(`Unknown notification event: ${eventKey}`);
+  }
+  const existing = await db.select().from(notificationSettings).where(eq(notificationSettings.eventKey, eventKey)).limit(1).execute();
+  if (existing.length === 0) {
+    await db.insert(notificationSettings).values({ eventKey, enabled }).execute();
+  } else {
+    await db.update(notificationSettings).set({ enabled }).where(eq(notificationSettings.eventKey, eventKey)).execute();
+  }
+  return { eventKey, enabled };
+}
+
+// ============ Smart Owner Notifications ============
+// Maps alertTypes → notification event keys; sends a single throttled digest to the owner
+const ALERT_TO_EVENT: Record<string, NotificationEventKey> = {
+  free_time_expiry: "free_time_expiry",
+  demurrage_risk: "demurrage_risk",
+  lc_expiry: "lc_expiry",
+  eta_overdue: "eta_overdue",
+  document_missing: "document_missing",
+};
+
+// Maps custom push-event keys (used outside alert_log, e.g. arrival tasks) → event key
+export async function pushEventNotification(eventKey: NotificationEventKey, title: string, content: string) {
+  const settings = await getNotificationSettings();
+  const enabled = settings.find(s => s.eventKey === eventKey)?.enabled === "yes";
+  if (!enabled) return false;
+  const { notifyOwner } = await import("./_core/notification");
+  return notifyOwner({ title, content });
+}
+
+/**
+ * Digests the latest alert_log rows (created in the last hour) and pushes
+ * a single summary notification to the owner for enabled event types.
+ * Idempotent-by-design: only alerts created since lastDigest lookback are considered,
+ * and a digest is sent at most once per hour per event category.
+ */
+export async function sendSmartNotifications(opts: { lookbackMinutes?: number } = {}) {
+  const lookbackMinutes = opts.lookbackMinutes ?? 60;
+  const db = await getDb(); if (!db) return { sent: false, reason: "db_unavailable" };
+  try {
+    const settings = await getNotificationSettings();
+    const enabled = new Set(
+      settings.filter(s => s.enabled === "yes").map(s => s.eventKey)
+    );
+    // Only consider alerts not yet pushed (real per-alert dedupe — repeated runs never resend the same digest)
+    const rows = await db.select().from(alertLog)
+      .where(eq(alertLog.notified, "no"))
+      .orderBy(desc(alertLog.createdAt))
+      .limit(200)
+      .execute();
+    const digest: Record<string, { titles: string[]; sample: string }> = {};
+    for (const r of rows) {
+      const event = ALERT_TO_EVENT[r.alertType ?? ""];
+      if (!event || !enabled.has(event)) continue;
+      if (!digest[event]) digest[event] = { titles: [], sample: "" };
+      if (digest[event].titles.length < 5) digest[event].titles.push(r.title ?? "");
+      if (!digest[event].sample) digest[event].sample = r.message ?? "";
+    }
+    if (Object.keys(digest).length === 0) return { sent: 0, total: rows.length };
+    const { notifyOwner } = await import("./_core/notification");
+    let sent = 0;
+    const successEvents = new Set<string>();
+    for (const [event, group] of Object.entries(digest)) {
+      const title = `[EMG-SCOS] تنبيهات ${event.replace(/_/g, " ")} — ${group.titles.length} شحنة`;
+      const content =
+        `الشحنات المتأثرة:\n${group.titles.join("\n")}` +
+        (group.sample ? `\n\nتفاصيل: ${group.sample}` : "") +
+        "\n\nالمزيد في صفحة Free Time Alerts داخل النظام.";
+      const ok = await notifyOwner({ title, content });
+      if (ok) { sent += 1; successEvents.add(event); }
+    }
+    // Only mark alerts as notified when their category's digest actually succeeded
+    // (failed deliveries stay notified='no' so the next run retries them — retry-safe).
+    const notifiedIds = rows
+      .filter(r => {
+        const event = ALERT_TO_EVENT[r.alertType ?? ""];
+        return Boolean(event && successEvents.has(event));
+      })
+      .map(r => r.id);
+    if (notifiedIds.length > 0) {
+      try {
+        await db.update(alertLog).set({ notified: "yes" }).where(
+          sql`${alertLog.id} IN (${sql.join(notifiedIds.map(id => sql`${id}`), sql`, `)})`
+        ).execute();
+      } catch (e) { console.error("[sendSmartNotifications] mark-notified", e); }
+    }
+    return { sent, total: rows.length };
+  } catch (e) {
+    console.error("[sendSmartNotifications]", e);
+    return { sent: false, reason: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 // ============ Alerts ============

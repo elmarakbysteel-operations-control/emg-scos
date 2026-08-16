@@ -155,3 +155,85 @@ describe("shipments.update → arrived auto-tasks", () => {
     }
   }, 60000);
 });
+
+// ---------------- Custom notifications ----------------
+// Mock notifyOwner so no real owner notification is sent during tests.
+vi.mock("./_core/notification", () => ({
+  notifyOwner: vi.fn(async () => true),
+}));
+import { notifyOwner } from "./_core/notification";
+import {
+  getNotificationSettings,
+  updateNotificationSetting,
+  getDb,
+} from "./db";
+import { alertLog } from "../drizzle/schema";
+
+describe("notification settings + smart digest", () => {
+  it("seeds all event keys enabled by default", async () => {
+    // Test-order resilience: an earlier run may have disabled this key
+    await updateNotificationSetting("demurrage_risk", "yes");
+    const settings = await getNotificationSettings();
+    const keys = settings.map((s: any) => s.eventKey);
+    for (const k of ["free_time_expiry", "demurrage_risk", "lc_expiry", "eta_overdue", "document_missing", "shipment_arrived", "discrepancy_found"]) {
+      expect(keys).toContain(k);
+    }
+    expect(settings.find((s: any) => s.eventKey === "demurrage_risk")!.enabled).toBe("yes");
+  }, 30000);
+
+  it("persists a disable toggle and blocks digest for that event", async () => {
+    await updateNotificationSetting("demurrage_risk", "no");
+    const settings = await getNotificationSettings();
+    expect(settings.find((s: any) => s.eventKey === "demurrage_risk")!.enabled).toBe("no");
+    // Temporarily insert a fresh demurrage alert (notified=no) and verify sendSmartNotifications skips it
+    const db = await getDb();
+    const r = await db!.insert(alertLog).values({
+      shipmentId: null as any, alertType: "demurrage_risk", severity: "critical",
+      title: "TEST-IGNORE demurrage", message: "test", read: "no", notified: "no" as any,
+    }).$returningId().execute();
+    vi.clearAllMocks();
+    const { sendSmartNotifications } = await import("./db");
+    const res = await sendSmartNotifications();
+    // digest should be empty for demurrage_risk → notifyOwner never called
+    expect(notifyOwner).not.toHaveBeenCalled();
+    expect((res as any).total).toBeGreaterThanOrEqual(1);
+    // Cleanup
+    await db!.delete(alertLog).where(eq(alertLog.id, r[0].id)).execute();
+    await updateNotificationSetting("demurrage_risk", "yes");
+  }, 60000);
+
+  it("retries failed deliveries: keeps notified='no' when notifyOwner fails", async () => {
+    const db = await getDb();
+    const r = await db!.insert(alertLog).values({
+      shipmentId: null as any, alertType: "lc_expiry", severity: "critical",
+      title: "TEST-RETRY LC", message: "retry test", read: "no", notified: "no" as any,
+    }).$returningId().execute();
+    // Force notifyOwner to fail on the next call only
+    vi.clearAllMocks();
+    (notifyOwner as any).mockResolvedValueOnce(false).mockResolvedValue(true);
+    const { sendSmartNotifications } = await import("./db");
+    const res1 = await sendSmartNotifications();
+    expect((res1 as any).sent).toBe(0); // delivery failed — nothing marked notified
+    const pending = await db!.select().from(alertLog).where(eq(alertLog.id, r[0].id)).limit(1).execute();
+    expect(pending[0].notified).toBe("no"); // still pending → next run will retry
+    const res2 = await sendSmartNotifications();
+    expect((res2 as any).sent).toBe(1); // retry succeeded
+    await db!.delete(alertLog).where(eq(alertLog.id, r[0].id)).execute();
+  }, 60000);
+
+  it("marks alerts as notified so repeated runs never resend the same digest", async () => {
+    const db = await getDb();
+    const r = await db!.insert(alertLog).values({
+      shipmentId: null as any, alertType: "free_time_expiry", severity: "high",
+      title: "TEST-DEDUPE Free Time", message: "dedupe test", read: "no", notified: "no" as any,
+    }).$returningId().execute();
+    const { sendSmartNotifications } = await import("./db");
+    vi.clearAllMocks();
+    const res1 = await sendSmartNotifications();
+    expect(notifyOwner).toHaveBeenCalled();
+    const res2 = await sendSmartNotifications();
+    expect((res2 as any).sent).toBe(0); // second run sends nothing — per-alert dedupe works
+    expect((res1 as any).sent).toBeGreaterThanOrEqual(1);
+    await db!.delete(alertLog).where(eq(alertLog.id, r[0].id)).execute();
+  }, 60000);
+});
