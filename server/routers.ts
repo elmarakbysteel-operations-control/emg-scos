@@ -30,7 +30,25 @@ export const appRouter = router({
     list: publicProcedure.query(async () => db.getShipments()),
     get: publicProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => db.getShipmentById(input.id)),
     create: publicProcedure.input(z.any()).mutation(async ({ input }) => db.createShipment(input)),
-    update: publicProcedure.input(z.any()).mutation(async ({ input }) => { const { id, ...data } = input; return db.updateShipment(id, data); }),
+    update: publicProcedure.input(z.any()).mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      const result = await db.updateShipment(id, data);
+      // Auto-create arrival tasks: when a shipment successfully moves to "arrived",
+      // seed the standard customs-preparation tasks (broker notification + customs docs
+      // preparation) if they do not already exist for this shipment.
+      if (data.status === "arrived") {
+        try {
+          const existing = await db.getTasksByShipment(id);
+          const titles = ["مُطالبة وكيل التخليص بمبدأ البيان الجمركي", "إعداد مستندات التخليص (Invoice / BL / COO)"];
+          for (const t of titles) {
+            if (!existing.some((e: any) => (e.title || "").includes(t))) {
+              await db.createTask({ shipmentId: id, title: t, description: "مهمة تلقائية: أنشئت عند وصول الشحنة", priority: "high", status: "not_started", dueDate: new Date(Date.now() + 3 * 86400000) });
+            }
+          }
+        } catch (e) { console.error("[auto-tasks]", e); }
+      }
+      return result;
+    }),
     delete: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => db.deleteShipment(input.id)),
   }),
 

@@ -7,8 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Plus, Edit, Trash2, FileCheck, Search } from "lucide-react";
+import { Plus, Edit, Trash2, FileCheck, Search, FileSpreadsheet, Download } from "lucide-react";
 import { toast } from "sonner";
+import { exportToExcel } from "@/lib/exportExcel";
+import { exportToPdf } from "@/lib/exportPdf";
 
 export default function CustomsManagement() {
   const { data: items, isLoading } = trpc.customs.list.useQuery();
@@ -40,6 +42,31 @@ export default function CustomsManagement() {
       utils.customs.list.invalidate();
       toast.success("Deleted");
     }
+  };
+  const handleExcelExport = () => {
+    exportToExcel(filtered, [
+      { header: "ACID Number", key: "acid", getValue: (r: any) => r.acidNumber || "—" },
+      { header: "UCR Number", key: "ucr", getValue: (r: any) => r.ucrNumber || "—" },
+      { header: "Declaration No", key: "decl", getValue: (r: any) => r.declarationNumber || "—" },
+      { header: "Broker", key: "broker", getValue: (r: any) => r.broker || "—" },
+      { header: "Arrival Date", key: "arrival", getValue: (r: any) => (r.arrivalDate ? new Date(r.arrivalDate).toLocaleDateString("en-GB") : "—") },
+      { header: "Release Date", key: "release", getValue: (r: any) => (r.releaseDate ? new Date(r.releaseDate).toLocaleDateString("en-GB") : "—") },
+      { header: "Clearance Time (hrs)", key: "clearance", getValue: (r: any) => r.clearanceTime || "—" },
+      { header: "Status", key: "status", getValue: (r: any) => statusLabels[r.status] || r.status || "—" },
+    ], `Customs_${new Date().toISOString().slice(0, 10)}.xlsx`, "Customs Clearance");
+    toast.success("Exported to Excel");
+  };
+  const handlePdfExport = () => {
+    exportToPdf(filtered, [
+      { header: "ACID Number", getValue: (r: any) => r.acidNumber || "—" },
+      { header: "UCR Number", getValue: (r: any) => r.ucrNumber || "—" },
+      { header: "Broker", getValue: (r: any) => r.broker || "—" },
+      { header: "Arrival", getValue: (r: any) => formatDate(r.arrivalDate) },
+      { header: "Release", getValue: (r: any) => formatDate(r.releaseDate) },
+      { header: "Clearance (hrs)", getValue: (r: any) => r.clearanceTime ? `${r.clearanceTime} hrs` : "—" },
+      { header: "Status", getValue: (r: any) => statusLabels[r.status] || r.status || "—" },
+    ], "Customs Management Report", `Customs_${new Date().toISOString().slice(0, 10)}.pdf`);
+    toast.success("Exported to PDF");
   };
 
   const statusColors: Record<string, string> = {
@@ -83,6 +110,10 @@ export default function CustomsManagement() {
             Customs Management
           </h1>
           <p className="text-sm text-slate-500 mt-1">NAFEZA clearance &amp; ACID tracking</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleExcelExport}><FileSpreadsheet className="w-4 h-4 mr-1 text-emerald-600" /> Excel</Button>
+          <Button variant="outline" size="sm" onClick={handlePdfExport}><Download className="w-4 h-4 mr-1 text-destructive" /> PDF</Button>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>

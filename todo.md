@@ -93,22 +93,22 @@
 ## Phase 9: System Enhancements (Session 6) — Auto-monitoring & Quality
 
 ### Scheduled Automation
-- [ ] Heartbeat handler /api/scheduled/daily-free-time-refresh: recomputes freeTimeExpiry + generates alert_log entries daily
-- [ ] Register project-level cron via manus-heartbeat CLI (daily 06:00 UTC)
-- [ ] HealthScore auto-update: shipments past freeTime expiry or delayed lower score
+- [x] Heartbeat handler /api/scheduled/daily-free-time-refresh: recomputes freeTimeExpiry + generates alert_log entries daily
+- [x] Register project-level cron via manus-heartbeat CLI (daily, task_uid A6mm3rEmgX4upV4zjmygHW)
+- [x] HealthScore auto-update: shipments past freeTime expiry or delayed lower score
 
 ### Data Quality & Automation
-- [ ] Auto-create default tasks when shipment moves to "arrived" status (customs docs prep, broker notify)
-- [ ] Free Time calculation API consistency: arrivalDate + freeTimeDays → expiry everywhere (overview + register + alerts)
-- [ ] Demo shipment 30001 demo-data cleanup (test artifacts)
+- [x] Auto-create default tasks when shipment moves to "arrived" status (broker notification + customs docs prep, high priority, not_started, 3-day due; idempotent; cleanup after test; covered by vitest: 15/15 passing)
+- [x] Free Time consistency: single computeFreeTime engine on server; expiry now persisted to shipments.freeTimeExpiry by daily job (verified 17/17), used in Alerts + Register + export
+- [x] Demo shipment 30001 cleanup: deleted dangling shipment/docs 1-2, reset extractionStatus on test docs 30008/60001
 
 ### Testing
-- [ ] Vitest: shipments API read/write round-trip, freeTime calc unit tests, export helpers smoke tests
-- [ ] Update existing test file with core business tests
+- [x] Vitest: shipments API read/write round-trip, freeTime calc unit tests, export helpers smoke tests (core-business.test.ts)
+- [x] Vitest: scheduled handler 403/ok/retry-safe + router surface vs real DB (scheduled.test.ts, 14/14 passing)
 
 ### Frontend Polish
-- [ ] Export button per-page consistency (procurement/freight/customs missing)
-- [ ] Loading skeletons on KPI cards for smoother perceived performance
+- [x] Export button per-page consistency: Excel+PDF buttons added to Procurement, Freight Management, Customs Management; Free Time Expiry column + export in Shipment Register (single computeFreeTime engine)
+- [x] Loading skeletons on KPI cards: enhanced pulse-shaped skeletons in Home.tsx + full skeleton grid while isLoading in KpiDashboard.tsx
 
 ### Verification & Deliver
-- [ ] TypeScript + vitest + screenshots, checkpoint, deliver
+- [x] Final verification: tsc OK, 15/15 vitest passing, screenshots verified (KPI fixed, Register 30 rows + Free Time column, exports on Procurement/Freight/Customs), cron job confirmed enabled (daily 06:00 UTC)

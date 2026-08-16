@@ -1,5 +1,6 @@
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { TrendingUp, Target, Clock, DollarSign, FileCheck, AlertTriangle, Ship, Users } from "lucide-react";
@@ -9,10 +10,10 @@ import {
 } from "recharts";
 
 export default function KpiDashboard() {
-  const { data: shipments } = trpc.shipments.list.useQuery();
-  const { data: customs } = trpc.customs.list.useQuery();
-  const { data: tasks } = trpc.tasks.list.useQuery();
-  const { data: costs } = trpc.costs.list.useQuery();
+  const { data: shipments, isLoading: shipLoading } = trpc.shipments.list.useQuery();
+  const { data: customs, isLoading: cusLoading } = trpc.customs.list.useQuery();
+  const { data: tasks, isLoading: taskLoading } = trpc.tasks.list.useQuery();
+  const { data: costs, isLoading: costLoading } = trpc.costs.list.useQuery();
 
   const totalShipments = (shipments || []).length;
   const deliveredShipments = (shipments || []).filter((s: any) => ["delivered", "cleared"].includes(s.status)).length;
@@ -47,6 +48,30 @@ export default function KpiDashboard() {
   }, [shipments]);
 
   const COLORS = ["#1e40af", "#059669", "#d97706", "#dc2626", "#6b7280", "#8b5cf6"];
+
+  if (shipLoading || cusLoading || taskLoading || costLoading) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 font-serif flex items-center gap-2"><TrendingUp className="w-6 h-6 text-blue-700" /> KPI Dashboard</h1>
+          <p className="text-sm text-slate-500 mt-1">Key Performance Indicators - Live Data</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i} className="border-0 shadow-sm">
+              <CardContent className="p-5">
+                <div className="animate-pulse space-y-3">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-8 w-24" />
+                  <Skeleton className="h-2 w-full" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

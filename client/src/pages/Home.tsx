@@ -29,7 +29,16 @@ const CLEARED_META: Record<string, { label: string; color: string }> = {
 const PIE_COLORS = ["#3b82f6", "#f59e0b", "#10b981", "#64748b", "#8b5cf6", "#0ea5e9", "#ef4444", "#14b8a6", "#f97316"];
 
 function KpiSkeleton() {
-  return <Skeleton className="h-20 w-full rounded-xl" />;
+  return (
+    <div className="flex items-center justify-between animate-pulse">
+      <div className="space-y-2">
+        <Skeleton className="h-3 w-24" />
+        <Skeleton className="h-8 w-16" />
+        <Skeleton className="h-3 w-28" />
+      </div>
+      <Skeleton className="w-12 h-12 rounded-xl" />
+    </div>
+  );
 }
 
 export default function Home() {

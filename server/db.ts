@@ -447,6 +447,11 @@ export async function applyExtraction(docId: number, fields: any[]) {
 }
 
 // ============ Tasks ============
+export async function getTasksByShipment(shipmentId: number) {
+  const db = await getDb(); if (!db) return [];
+  return db.select().from(tasks).where(eq(tasks.shipmentId, shipmentId)).execute();
+}
+
 export async function getTasks() {
   const db = await getDb(); if (!db) return [];
   return db.select().from(tasks).orderBy(desc(tasks.createdAt)).execute();
@@ -700,6 +705,11 @@ export async function refreshHealthScores() {
   const all = await db.select().from(shipments).execute();
   for (const s of all) {
     const f = computeFreeTime(s);
+    // Persist the computed expiry back to the DB so every page reads the same value
+    const expiryMs = f.expiry ? f.expiry.getTime() : null;
+    if (expiryMs !== (s.freeTimeExpiry?.getTime() ?? null)) {
+      try { await db.update(shipments).set({ freeTimeExpiry: expiryMs ? new Date(expiryMs) : null }).where(eq(shipments.id, s.id)).execute(); } catch (e) { console.error("[freeTimeExpiry]", e); }
+    }
     let score = s.healthScore ?? 100;
     if (f.expired) score = Math.min(score ?? 100, 40);
     else if (f.atRisk) score = Math.min(score ?? 100, 65);

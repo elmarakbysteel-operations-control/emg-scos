@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { computeFreeTime } from "./db";
 
 // ---------------- computeFreeTime engine (pure, no DB needed) ----------------
@@ -88,4 +88,70 @@ describe("computeFreeTime", () => {
     expect(r.daysLeft).toBeLessThanOrEqual(0);
     expect(r.atRisk).toBe(true);
   });
+});
+
+// ---------------- shipments.update arrival auto-tasks ----------------
+// Uses a partial DB mock: all helpers stay real except the two scheduled-job
+// internals, so router tests exercise the actual database.
+vi.mock("./db", async (importOriginal) => {
+  const actual = await (importOriginal as typeof vi.importActual<typeof import("./db")>)("./db");
+  return {
+    ...actual,
+    regenerateFreeTimeAlerts: vi.fn().mockResolvedValue(undefined),
+    refreshHealthScores: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
+import { beforeAll } from "vitest";
+import { getDb, getTasksByShipment, getShipments } from "./db";
+import { tasks, shipments } from "../drizzle/schema";
+import { and, eq, or, sql } from "drizzle-orm";
+import { appRouter } from "./routers";
+import type { TrpcContext } from "./_core/context";
+
+function makeCtx(): TrpcContext {
+  return {
+    req: { headers: {} } as any,
+    res: {} as any,
+    user: { id: 0, openId: "test", name: "Test", email: null, loginMethod: null, role: "user", createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() } as any,
+  };
+}
+
+let testShipmentId: number | null = null;
+
+describe("shipments.update → arrived auto-tasks", () => {
+  let originalStatus: string | null = null;
+  beforeAll(async () => {
+    // Pick an existing in-transit shipment as the test subject to avoid seeding data.
+    const rows = await getShipments();
+    const candidate = (rows || []).find((s: any) => (s.status || "") === "in_transit" || (s.status || "") === "shipped");
+    if (candidate) {
+      testShipmentId = candidate.id;
+      originalStatus = candidate.status;
+    }
+  }, 60000);
+
+  it("creates the two arrival tasks exactly once when status moves to arrived", async () => {
+    if (!testShipmentId) return;
+    const caller = appRouter.createCaller(makeCtx() as TrpcContext);
+    await caller.shipments.update({ id: testShipmentId, status: "arrived" });
+    const tasks1 = await getTasksByShipment(testShipmentId);
+    const arrived = (t: any) => t.title?.includes("مُطالبة وكيل التخليص");
+    const docs = (t: any) => t.title?.includes("إعداد مستندات التخليص");
+    expect(tasks1.filter(arrived).length).toBe(1);
+    expect(tasks1.filter(docs).length).toBe(1);
+    expect(tasks1.find(arrived)!.priority).toBe("high");
+    expect(tasks1.find(arrived)!.status).toBe("not_started");
+    // Idempotent: moving to arrived again must NOT duplicate.
+    await caller.shipments.update({ id: testShipmentId, status: "arrived" });
+    const tasks2 = await getTasksByShipment(testShipmentId);
+    expect(tasks2.filter(arrived).length).toBe(1);
+    expect(tasks2.filter(docs).length).toBe(1);
+    // Cleanup: remove test tasks and restore original status so demo data stays accurate.
+    const db = await getDb();
+    if (db && originalStatus) {
+      await db.delete(tasks).where(and(eq(tasks.shipmentId, testShipmentId!), or(sql`title LIKE '%مُطالبة وكيل التخليص%'`, sql`title LIKE '%إعداد مستندات التخليص%'`))).execute();
+      await db.update(shipments).set({ status: originalStatus as any }).where(eq(shipments.id, testShipmentId!)).execute();
+    }
+  }, 60000);
 });

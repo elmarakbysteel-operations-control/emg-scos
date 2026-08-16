@@ -7,8 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Plus, Edit, Trash2, Ship, Search } from "lucide-react";
+import { Plus, Edit, Trash2, Ship, Search, FileSpreadsheet, Download } from "lucide-react";
 import { toast } from "sonner";
+import { exportToExcel } from "@/lib/exportExcel";
+import { exportToPdf } from "@/lib/exportPdf";
 
 export default function FreightManagement() {
   const { data: items, isLoading } = trpc.freight.list.useQuery();
@@ -42,6 +44,33 @@ export default function FreightManagement() {
       toast.success("Deleted");
     }
   };
+  const handleExcelExport = () => {
+    exportToExcel(filtered, [
+      { header: "Booking Ref", key: "ref", getValue: (r: any) => r.bookingRef || "—" },
+      { header: "Shipping Line", key: "line", getValue: (r: any) => r.shippingLine || "—" },
+      { header: "Container", key: "container", getValue: (r: any) => r.containerType || "—" },
+      { header: "Origin Port", key: "origin", getValue: (r: any) => r.originPort || "—" },
+      { header: "Destination Port", key: "dest", getValue: (r: any) => r.destinationPort || "—" },
+      { header: "ETD", key: "etd", getValue: (r: any) => (r.etd ? new Date(r.etd).toLocaleDateString("en-GB") : "—") },
+      { header: "ETA", key: "eta", getValue: (r: any) => (r.eta ? new Date(r.eta).toLocaleDateString("en-GB") : "—") },
+      { header: "Freight Cost (USD)", key: "cost", getValue: (r: any) => r.freightCost || 0 },
+      { header: "BL Number", key: "bl", getValue: (r: any) => r.blNumber || "—" },
+      { header: "Status", key: "status", getValue: (r: any) => r.status || "—" },
+    ], `Freight_${new Date().toISOString().slice(0, 10)}.xlsx`, "Freight Bookings");
+    toast.success("Exported to Excel");
+  };
+  const handlePdfExport = () => {
+    exportToPdf(filtered, [
+      { header: "Booking Ref", getValue: (r: any) => r.bookingRef || "—" },
+      { header: "Shipping Line", getValue: (r: any) => r.shippingLine || "—" },
+      { header: "Route", getValue: (r: any) => `${r.originPort || "—"} → ${r.destinationPort || "—"}` },
+      { header: "ETA", getValue: (r: any) => (r.eta ? new Date(r.eta).toLocaleDateString("en-GB") : "—") },
+      { header: "Freight Cost (USD)", getValue: (r: any) => r.freightCost || 0 },
+      { header: "BL Number", getValue: (r: any) => r.blNumber || "—" },
+      { header: "Status", getValue: (r: any) => r.status || "—" },
+    ], "Freight Management Report", `Freight_${new Date().toISOString().slice(0, 10)}.pdf`);
+    toast.success("Exported to PDF");
+  };
 
   const statusColors: Record<string, string> = {
     booked: "bg-blue-100 text-blue-700",
@@ -73,6 +102,10 @@ export default function FreightManagement() {
             Freight Management
           </h1>
           <p className="text-sm text-slate-500 mt-1">Booking &amp; BL tracking</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleExcelExport}><FileSpreadsheet className="w-4 h-4 mr-1 text-emerald-600" /> Excel</Button>
+          <Button variant="outline" size="sm" onClick={handlePdfExport}><Download className="w-4 h-4 mr-1 text-destructive" /> PDF</Button>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
