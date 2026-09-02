@@ -10,7 +10,7 @@ describe("computeFreeTime", () => {
   });
 
   it("computes expiry as arrival + freeTimeDays", () => {
-    const arrival = new Date("2026-08-10T00:00:00Z").getTime();
+    const arrival = Date.now() + 2 * 86400000;
     const r = computeFreeTime({
       shipmentNo: "EMG-002",
       status: "arrived",
